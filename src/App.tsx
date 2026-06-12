@@ -7,6 +7,8 @@ import NotFoundPage from './pages/NotFoundPage';
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const LocationDetailPage = lazy(() => import('./pages/LocationDetailPage'));
 
+const basename = import.meta.env.BASE_URL === '/' ? undefined : import.meta.env.BASE_URL.replace(/\/$/, '');
+
 const App = createBrowserRouter(
   [
     {
@@ -38,6 +40,7 @@ const App = createBrowserRouter(
     },
   ],
   {
+    basename,
     future: {
       v7_relativeSplatPath: true,
     },

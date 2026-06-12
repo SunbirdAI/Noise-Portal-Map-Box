@@ -1,40 +1,92 @@
-import type { ChartPoint, HeatmapCell, NoiseMetric } from '../models/sensor';
+import type { ChartPoint, HeatmapCell, HourlyTrendPoint, NoiseMetric } from '../models/sensor';
+
+function parseDate(value?: string): Date | undefined {
+  if (!value) {
+    return undefined;
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+function timestampValue(value?: string): number | undefined {
+  return parseDate(value)?.getTime();
+}
 
 function dateKey(value?: string): string {
   if (!value) {
     return 'Unknown';
   }
 
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
+  const date = parseDate(value);
+  if (!date) {
     return value;
   }
 
   return date.toISOString().slice(0, 10);
 }
 
-function timeLabel(value?: string): string {
-  if (!value) {
-    return 'No timestamp';
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
+export function formatTrendTime(timestamp: number): string {
   return new Intl.DateTimeFormat(undefined, {
     hour: '2-digit',
     minute: '2-digit',
-  }).format(date);
+  }).format(timestamp);
+}
+
+export function formatTrendDateTime(timestamp: number): string {
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(timestamp);
+}
+
+function timeLabel(value?: string): string {
+  const timestamp = timestampValue(value);
+  return timestamp === undefined ? value ?? 'No timestamp' : formatTrendTime(timestamp);
+}
+
+export function normalizeHourlyTrendData(metrics: NoiseMetric[]): HourlyTrendPoint[] {
+  return metrics
+    .map((metric, index) => {
+      const timestamp = timestampValue(metric.uploadedAt);
+
+      if (timestamp === undefined) {
+        return undefined;
+      }
+
+      const average = nullableNumber(metric.avgDbLevel);
+      const maxValue = nullableNumber(metric.maxDbLevel);
+      const reading = nullableNumber(metric.dbLevel);
+
+      if (average === null && maxValue === null && reading === null) {
+        return undefined;
+      }
+
+      return {
+        key: metric.uploadedAt ?? metric.id ?? String(index),
+        timestamp,
+        label: formatTrendTime(timestamp),
+        average,
+        max: maxValue,
+        reading,
+      };
+    })
+    .filter((point): point is HourlyTrendPoint => point !== undefined)
+    .sort((a, b) => a.timestamp - b.timestamp);
+}
+
+export function countUniqueTrendTimestamps(points: HourlyTrendPoint[]): number {
+  return new Set(points.map((point) => point.timestamp)).size;
 }
 
 export function metricsToChartPoints(metrics: NoiseMetric[]): ChartPoint[] {
   return [...metrics]
     .filter((metric) => metric.uploadedAt || metric.dbLevel !== undefined || metric.avgDbLevel !== undefined)
     .sort((a, b) => {
-      const left = a.uploadedAt ? new Date(a.uploadedAt).getTime() : 0;
-      const right = b.uploadedAt ? new Date(b.uploadedAt).getTime() : 0;
+      const left = timestampValue(a.uploadedAt) ?? 0;
+      const right = timestampValue(b.uploadedAt) ?? 0;
       return left - right;
     })
     .map((metric, index) => ({
@@ -83,10 +135,10 @@ export function buildHeatmap(metrics: NoiseMetric[]): HeatmapCell[] {
       continue;
     }
 
-    const date = new Date(metric.uploadedAt);
+    const date = parseDate(metric.uploadedAt);
     const value = metric.avgDbLevel ?? metric.dbLevel;
 
-    if (Number.isNaN(date.getTime()) || value === undefined) {
+    if (!date || value === undefined) {
       continue;
     }
 
@@ -105,8 +157,12 @@ export function buildHeatmap(metrics: NoiseMetric[]): HeatmapCell[] {
   });
 }
 
-function isNumber(value: number | undefined): value is number {
-  return value !== undefined && Number.isFinite(value);
+function isNumber(value: number | undefined | null): value is number {
+  return value !== undefined && value !== null && Number.isFinite(value);
+}
+
+function nullableNumber(value: number | undefined | null): number | null {
+  return isNumber(value) ? value : null;
 }
 
 function average(values: number[]): number | undefined {

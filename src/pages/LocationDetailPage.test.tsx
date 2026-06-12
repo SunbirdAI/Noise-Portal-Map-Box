@@ -66,6 +66,15 @@ describe('LocationDetailPage', () => {
           batteryVoltage: 3.8,
           uploadedAt: '2026-06-08T14:46:47+03:00',
         },
+        {
+          id: 'metric-2',
+          dbLevel: 54,
+          avgDbLevel: 48,
+          maxDbLevel: 62,
+          exceedances: 2,
+          batteryVoltage: 3.9,
+          uploadedAt: '2026-06-08T15:46:47+03:00',
+        },
       ],
     });
     vi.mocked(fetchAiInference).mockResolvedValue(undefined);
@@ -76,6 +85,7 @@ describe('LocationDetailPage', () => {
     expect(await screen.findByRole('heading', { name: 'Busia A' })).toBeInTheDocument();
     expect(screen.getByText('SB1003')).toBeInTheDocument();
     expect(screen.getByText('Latest hourly average')).toBeInTheDocument();
-    expect(await screen.findByText('46.0 dB')).toBeInTheDocument();
+    expect(await screen.findAllByText('48.0 dB')).not.toHaveLength(0);
+    expect(screen.queryByText('Only one reading available.')).not.toBeInTheDocument();
   });
 });

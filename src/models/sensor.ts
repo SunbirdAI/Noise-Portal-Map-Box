@@ -96,6 +96,7 @@ export interface SensorLiveData {
   battery: number | null;
   device?: DeviceInfo;
   metric?: NoiseMetric;
+  metrics?: NoiseMetric[];
   environment?: EnvironmentalReading;
   inference?: AiInference;
 }
@@ -119,6 +120,15 @@ export interface ChartPoint {
   median?: number;
   db?: number;
   exceedances?: number;
+}
+
+export interface HourlyTrendPoint {
+  key: string;
+  timestamp: number;
+  label: string;
+  average: number | null;
+  max: number | null;
+  reading: number | null;
 }
 
 export interface HeatmapCell {

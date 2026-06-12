@@ -2,6 +2,8 @@ import { Github, MapPinned } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { API_BASE_URL } from '../config/env';
 
+const appBaseUrl = import.meta.env.BASE_URL;
+
 export default function AppShell() {
   return (
     <div className="min-h-screen bg-slate-50 text-ink">
@@ -10,7 +12,7 @@ export default function AppShell() {
           <NavLink to="/" className="flex min-w-0 items-center gap-3">
             <span className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
               <img
-                src="/sunbird-icon-192.png"
+                src={`${appBaseUrl}sunbird-icon-192.png`}
                 alt=""
                 className="size-9 object-contain"
                 aria-hidden="true"

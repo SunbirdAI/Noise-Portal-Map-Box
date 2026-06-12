@@ -82,6 +82,37 @@ describe('fetchSensorLiveData', () => {
     expect(data.inference).toBeUndefined();
   });
 
+  it('preserves generic device metric history for detail trend charts', async () => {
+    vi.mocked(fetchDeviceByName).mockResolvedValue({
+      deviceId: 'SB1003',
+      sensorType: 'MCU',
+      metrics: [
+        {
+          id: 'earlier',
+          avgDbLevel: 46,
+          maxDbLevel: 59,
+          dbLevel: 52,
+          uploadedAt: '2026-06-08T10:00:00Z',
+        },
+        {
+          id: 'latest',
+          avgDbLevel: 49,
+          maxDbLevel: 63,
+          dbLevel: 55,
+          uploadedAt: '2026-06-08T11:00:00Z',
+        },
+      ],
+    });
+
+    const data = await fetchSensorLiveData('SB1003');
+
+    expect(fetchEnvironmentalReading).not.toHaveBeenCalled();
+    expect(fetchAiInference).not.toHaveBeenCalled();
+    expect(data.metric?.id).toBe('latest');
+    expect(data.metrics?.map((metric) => metric.id)).toEqual(['earlier', 'latest']);
+    expect(data.latestNoise).toBe(55);
+  });
+
   it('treats zero as a real live value', () => {
     const metric = liveDataToNoiseMetric({
       type: 'AI',

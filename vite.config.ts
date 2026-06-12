@@ -3,8 +3,20 @@ import { defineConfig } from 'vitest/config';
 
 const apiProxyTarget = 'https://noise-sensors-dashboard.herokuapp.com';
 
+function normalizeBasePath(basePath: string): string {
+  if (!basePath.startsWith('/')) {
+    return normalizeBasePath(`/${basePath}`);
+  }
+
+  return basePath.endsWith('/') ? basePath : `${basePath}/`;
+}
+
+const defaultBasePath = '/noise-portal-map-box/';
+const basePath = normalizeBasePath(process.env.VITE_BASE_PATH ?? defaultBasePath);
+
 export default defineConfig({
   plugins: [react()],
+  base: basePath,
   server: {
     proxy: {
       '/api': {

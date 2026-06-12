@@ -2,19 +2,20 @@
   "name": "Sunbird AI Noise Dashboard",
   "short_name": "Noise Dashboard",
   "description": "Public dashboard for monitoring live environmental noise levels across Kampala and Entebbe.",
-  "start_url": "/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#f8fafc",
   "theme_color": "#0f172a",
   "icons": [
     {
-      "src": "/sunbird-icon-192.png",
+      "src": "sunbird-icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/sunbird-icon-512.png",
+      "src": "sunbird-icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"

@@ -35,5 +35,6 @@ export async function fetchSensorLiveData(deviceName: string): Promise<SensorLiv
     battery: latestMetric?.batteryVoltage ?? null,
     device,
     metric: latestMetric,
+    metrics: device.metrics,
   };
 }

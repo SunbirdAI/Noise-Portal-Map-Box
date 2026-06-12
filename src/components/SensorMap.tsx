@@ -7,6 +7,8 @@ import { buildOverlapIndex, type OverlapGroup, type SensorGroupMeta } from '../l
 import { getNoiseCategory, getNoiseClusterMaxExpression, getNoiseColorExpression } from '../lib/noiseScale';
 import NoiseLevelLegend from './NoiseLevelLegend';
 
+const appBaseUrl = import.meta.env.BASE_URL === '/' ? '' : import.meta.env.BASE_URL.replace(/\/$/, '');
+
 interface SensorMapProps {
   sensors: SensorSummary[];
 }
@@ -592,7 +594,7 @@ function renderPopup(properties: Record<string, unknown>): string {
         ${popupRow('Day limit', formatDb(dayLimit))}
         ${popupRow('Night limit', formatDb(nightLimit))}
       </dl>
-      <a class="sensor-popup__link" href="/locations/${encodeURIComponent(id)}">View details</a>
+      <a class="sensor-popup__link" href="${appBaseUrl}/locations/${encodeURIComponent(id)}">View details</a>
     </div>
   `;
 }

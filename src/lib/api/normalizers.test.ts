@@ -86,4 +86,24 @@ describe('API normalizers', () => {
       exceedances: 1,
     });
   });
+
+  it('normalizes Django hourly aggregate fields', () => {
+    expect(
+      normalizeMetric({
+        id: 'aggregate-id',
+        date: '2026-06-08T10:00:00Z',
+        hour: 10,
+        hourly_avg_db_level: '44.5',
+        hourly_max_db_level: 61,
+        hourly_median_db_level: 45,
+        hourly_no_of_exceedances: 3,
+      }),
+    ).toMatchObject({
+      avgDbLevel: 44.5,
+      maxDbLevel: 61,
+      medianDbLevel: 45,
+      exceedances: 3,
+      uploadedAt: '2026-06-08T10:00:00Z',
+    });
+  });
 });

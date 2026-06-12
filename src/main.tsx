@@ -16,6 +16,21 @@ const queryClient = new QueryClient({
   },
 });
 
+function restoreGitHubPagesRoute() {
+  const routeParam = new URLSearchParams(window.location.search).get('p');
+
+  if (!routeParam) {
+    return;
+  }
+
+  const redirectedUrl = new URL(decodeURIComponent(routeParam), window.location.origin);
+  const basePath = import.meta.env.BASE_URL === '/' ? '' : import.meta.env.BASE_URL.replace(/\/$/, '');
+
+  window.history.replaceState(null, '', `${basePath}${redirectedUrl.pathname}${redirectedUrl.search}${redirectedUrl.hash}`);
+}
+
+restoreGitHubPagesRoute();
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>

@@ -12,9 +12,10 @@ import {
   locationMetricsQuery,
   locationsQuery,
 } from '../lib/api/queries';
-import { aggregateDailyPoints, buildHeatmap, metricsToChartPoints } from '../lib/charts';
+import { aggregateDailyPoints, buildHeatmap, metricsToChartPoints, normalizeHourlyTrendData } from '../lib/charts';
+import { selectDetailNoiseMetrics } from '../lib/detailMetrics';
 import { formatDateTime, formatDb, formatInteger, formatNumber, formatRelative } from '../lib/format';
-import { detectSensorType, getLatestMetric, liveDataToNoiseMetric } from '../lib/sensors';
+import { detectSensorType, getLatestMetric } from '../lib/sensors';
 import type { NoiseMetric } from '../models/sensor';
 
 export default function LocationDetailPage() {
@@ -36,13 +37,11 @@ export default function LocationDetailPage() {
   const isAiSensor = inferredType === 'AI';
 
   const availableMetrics = useMemo<NoiseMetric[]>(() => {
-    const hourly = locationMetricsResult.data?.hourly ?? [];
-    const liveMetric = liveDataToNoiseMetric(liveData);
-    return hourly.length > 0 ? hourly : liveMetric ? [liveMetric] : [];
+    return selectDetailNoiseMetrics(locationMetricsResult.data?.hourly, liveData);
   }, [liveData, locationMetricsResult.data?.hourly]);
 
   const latestMetric = useMemo(() => getLatestMetric(availableMetrics), [availableMetrics]);
-  const hourlyPoints = useMemo(() => metricsToChartPoints(availableMetrics), [availableMetrics]);
+  const hourlyPoints = useMemo(() => normalizeHourlyTrendData(availableMetrics), [availableMetrics]);
   const dailyPoints = useMemo(() => {
     const daily = locationMetricsResult.data?.daily ?? [];
     return daily.length > 0 ? metricsToChartPoints(daily) : aggregateDailyPoints(availableMetrics);

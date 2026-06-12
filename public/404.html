@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sunbird AI Noise Dashboard</title>
+    <script>
+      (function () {
+        var basePath = '/noise-portal-map-box/';
+        var pathname = window.location.pathname;
+        var search = window.location.search;
+        var hash = window.location.hash;
+        var prefix = basePath.replace(/\/$/, '');
+
+        if (pathname.indexOf(prefix) === 0) {
+          pathname = pathname.slice(prefix.length) || '/';
+        }
+
+        window.location.replace(basePath + '?p=' + encodeURIComponent(pathname + search + hash));
+      })();
+    </script>
+  </head>
+  <body></body>
+</html>
