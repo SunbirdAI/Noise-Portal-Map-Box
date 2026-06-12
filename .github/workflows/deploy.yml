@@ -19,7 +19,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      VITE_BASE_PATH: /noise-portal-map-box/
+      VITE_BASE_PATH: /Noise-Portal-Map-Box/
       VITE_API_BASE_URL: https://noise-sensors-dashboard.herokuapp.com
       VITE_MAPBOX_ACCESS_TOKEN: ${{ secrets.VITE_MAPBOX_ACCESS_TOKEN }}
     steps:

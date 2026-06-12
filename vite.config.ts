@@ -11,7 +11,7 @@ function normalizeBasePath(basePath: string): string {
   return basePath.endsWith('/') ? basePath : `${basePath}/`;
 }
 
-const defaultBasePath = '/noise-portal-map-box/';
+const defaultBasePath = '/Noise-Portal-Map-Box/';
 const basePath = normalizeBasePath(process.env.VITE_BASE_PATH ?? defaultBasePath);
 
 export default defineConfig({
