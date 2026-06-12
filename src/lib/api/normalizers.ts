@@ -6,6 +6,7 @@ import type {
   EnvironmentalReading,
   LocationMetrics,
   NoiseMetric,
+  PaginatedData,
   SensorLocation,
 } from '../../models/sensor';
 
@@ -148,6 +149,77 @@ export function normalizeLocationMetrics(payload: unknown): LocationMetrics {
     hourly: asArray(raw.location_hourly_metrics ?? raw.hourly ?? raw.results).map(normalizeMetric),
     daily: asArray(raw.location_daily_metrics ?? raw.daily).map(normalizeMetric),
   };
+}
+
+function normalizeDateRange(rawValue: unknown): PaginatedData<unknown>['range'] {
+  const raw = asRecord(rawValue);
+
+  if (Object.keys(raw).length === 0) {
+    return undefined;
+  }
+
+  return {
+    startDate: stringField(raw, ['start_date', 'startDate']),
+    endDate: stringField(raw, ['end_date', 'endDate']),
+    timezone: stringField(raw, ['timezone', 'time_zone']),
+  };
+}
+
+function normalizePageDevice(rawValue: unknown): PaginatedData<unknown>['device'] {
+  const raw = asRecord(rawValue);
+
+  if (Object.keys(raw).length === 0) {
+    return undefined;
+  }
+
+  return {
+    id: stringField(raw, ['id']),
+    deviceId: stringField(raw, ['device_id', 'device', 'deviceName']),
+    type: stringField(raw, ['type', 'device_type']),
+  };
+}
+
+function normalizePaginatedData<T>(payload: unknown, normalizeItem: (item: unknown) => T): PaginatedData<T> {
+  const raw = asRecord(payload);
+  const items = asArray(raw.results ?? payload);
+
+  return {
+    count: numberField(raw, ['count']) ?? items.length,
+    next: stringField(raw, ['next']),
+    previous: stringField(raw, ['previous']),
+    range: normalizeDateRange(raw.range),
+    device: normalizePageDevice(raw.device),
+    results: items.map(normalizeItem),
+  };
+}
+
+function normalizeOptionalPaginatedData<T>(
+  payload: unknown,
+  normalizeItem: (item: unknown) => T | undefined,
+): PaginatedData<T> {
+  const raw = asRecord(payload);
+  const items = asArray(raw.results ?? payload);
+
+  return {
+    count: numberField(raw, ['count']) ?? items.length,
+    next: stringField(raw, ['next']),
+    previous: stringField(raw, ['previous']),
+    range: normalizeDateRange(raw.range),
+    device: normalizePageDevice(raw.device),
+    results: items.map(normalizeItem).filter((item): item is T => item !== undefined),
+  };
+}
+
+export function normalizeMetricPage(payload: unknown): PaginatedData<NoiseMetric> {
+  return normalizePaginatedData(payload, normalizeMetric);
+}
+
+export function normalizeEnvironmentalReadingPage(payload: unknown): PaginatedData<EnvironmentalReading> {
+  return normalizeOptionalPaginatedData(payload, normalizeEnvironmentalReading);
+}
+
+export function normalizeAiInferencePage(payload: unknown): PaginatedData<AiInference> {
+  return normalizeOptionalPaginatedData(payload, normalizeAiInference);
 }
 
 export function normalizeDeviceInfo(payload: unknown): DeviceInfo {

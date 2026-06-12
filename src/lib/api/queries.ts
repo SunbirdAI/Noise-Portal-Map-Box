@@ -7,6 +7,8 @@ import {
   fetchLocationMetrics,
 } from './client';
 import { fetchSensorLiveData } from '../liveSensorData';
+import { fetchSensorRangeData } from '../rangeSensorData';
+import type { DateRangeSelection } from '../dateRanges';
 
 export const locationsQuery = () =>
   queryOptions({
@@ -36,6 +38,14 @@ export const liveSensorQuery = (deviceName: string) =>
     queryKey: ['sensorLiveData', deviceName],
     queryFn: () => fetchSensorLiveData(deviceName),
     staleTime: 45_000,
+    enabled: Boolean(deviceName),
+  });
+
+export const sensorRangeDataQuery = (deviceName: string, range: DateRangeSelection) =>
+  queryOptions({
+    queryKey: ['sensorRangeData', deviceName, range.startDate, range.endDate],
+    queryFn: () => fetchSensorRangeData(deviceName, range),
+    staleTime: 60_000,
     enabled: Boolean(deviceName),
   });
 

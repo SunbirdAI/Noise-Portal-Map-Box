@@ -1,8 +1,9 @@
-import { Suspense, useMemo } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
 import { Activity, ArrowLeft, Battery, BrainCircuit, CloudSun, Gauge, RadioTower, ShieldAlert } from 'lucide-react';
 import Badge from '../components/Badge';
+import DateRangeSelector from '../components/DateRangeSelector';
 import LoadingPanel from '../components/LoadingPanel';
 import MetricCard from '../components/MetricCard';
 import StatusPanel from '../components/StatusPanel';
@@ -11,15 +12,18 @@ import {
   liveSensorQuery,
   locationMetricsQuery,
   locationsQuery,
+  sensorRangeDataQuery,
 } from '../lib/api/queries';
 import { aggregateDailyPoints, buildHeatmap, metricsToChartPoints, normalizeHourlyTrendData } from '../lib/charts';
+import { createPresetDateRange } from '../lib/dateRanges';
 import { selectDetailNoiseMetrics } from '../lib/detailMetrics';
 import { formatDateTime, formatDb, formatInteger, formatNumber, formatRelative } from '../lib/format';
-import { detectSensorType, getLatestMetric } from '../lib/sensors';
+import { detectSensorType, getLatestMetric, liveDataToNoiseMetric } from '../lib/sensors';
 import type { NoiseMetric } from '../models/sensor';
 
 export default function LocationDetailPage() {
   const { locationId = '' } = useParams();
+  const [selectedRange, setSelectedRange] = useState(() => createPresetDateRange('24h'));
   const locationsResult = useQuery(locationsQuery());
   const locationMetricsResult = useQuery(locationMetricsQuery(locationId));
   const location = useMemo(
@@ -31,21 +35,43 @@ export default function LocationDetailPage() {
     ...liveSensorQuery(deviceName),
     enabled: Boolean(deviceName),
   });
+  const rangeMetricsResult = useQuery({
+    ...sensorRangeDataQuery(deviceName, selectedRange),
+    enabled: Boolean(deviceName),
+  });
   const liveData = liveSensorResult.data;
   const device = liveData?.device;
   const inferredType = liveData?.type ?? detectSensorType({ deviceName });
   const isAiSensor = inferredType === 'AI';
+  const liveMetric = useMemo(() => liveDataToNoiseMetric(liveData), [liveData]);
 
-  const availableMetrics = useMemo<NoiseMetric[]>(() => {
+  const fallbackMetrics = useMemo<NoiseMetric[]>(() => {
     return selectDetailNoiseMetrics(locationMetricsResult.data?.hourly, liveData);
   }, [liveData, locationMetricsResult.data?.hourly]);
 
-  const latestMetric = useMemo(() => getLatestMetric(availableMetrics), [availableMetrics]);
+  const availableMetrics = useMemo<NoiseMetric[]>(() => {
+    if (rangeMetricsResult.isSuccess) {
+      return rangeMetricsResult.data.hourlyMetrics;
+    }
+
+    return fallbackMetrics;
+  }, [fallbackMetrics, rangeMetricsResult.data?.hourlyMetrics, rangeMetricsResult.isSuccess]);
+
+  const latestMetric = useMemo(
+    () => getLatestMetric(availableMetrics) ?? (rangeMetricsResult.isSuccess ? undefined : liveMetric),
+    [availableMetrics, liveMetric, rangeMetricsResult.isSuccess],
+  );
+  const healthMetric = liveMetric ?? latestMetric;
   const hourlyPoints = useMemo(() => normalizeHourlyTrendData(availableMetrics), [availableMetrics]);
   const dailyPoints = useMemo(() => {
+    if (rangeMetricsResult.isSuccess) {
+      const daily = rangeMetricsResult.data.dailyMetrics;
+      return daily.length > 0 ? metricsToChartPoints(daily) : aggregateDailyPoints(availableMetrics);
+    }
+
     const daily = locationMetricsResult.data?.daily ?? [];
     return daily.length > 0 ? metricsToChartPoints(daily) : aggregateDailyPoints(availableMetrics);
-  }, [availableMetrics, locationMetricsResult.data?.daily]);
+  }, [availableMetrics, locationMetricsResult.data?.daily, rangeMetricsResult.data?.dailyMetrics, rangeMetricsResult.isSuccess]);
   const heatmap = useMemo(() => buildHeatmap(availableMetrics), [availableMetrics]);
 
   if (locationsResult.isPending && locationMetricsResult.isPending) {
@@ -91,13 +117,25 @@ export default function LocationDetailPage() {
         </Link>
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone={isAiSensor ? 'blue' : inferredType === 'MCU' ? 'green' : 'neutral'}>{inferredType}</Badge>
-          <Badge tone={latestMetric ? 'green' : 'neutral'}>{latestMetric ? 'Live metrics' : 'No live data'}</Badge>
+          <Badge tone={liveMetric ? 'green' : 'neutral'}>{liveMetric ? 'Live metrics' : 'No live data'}</Badge>
         </div>
       </div>
 
-      {locationsResult.isError || locationMetricsResult.isError || liveSensorResult.isError ? (
+      {locationsResult.isError || locationMetricsResult.isError || liveSensorResult.isError || rangeMetricsResult.isError ? (
         <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
           Some location detail requests failed. The page is showing all data that could be loaded from the backend.
+        </div>
+      ) : null}
+
+      {rangeMetricsResult.data?.partialFailures?.length ? (
+        <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
+          Some selected-range data could not be loaded: {rangeMetricsResult.data.partialFailures.join(', ')}.
+        </div>
+      ) : null}
+
+      {rangeMetricsResult.data?.rangeNotices?.length ? (
+        <div className="mb-5 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-950">
+          {rangeMetricsResult.data.rangeNotices.join(' ')}
         </div>
       ) : null}
 
@@ -123,25 +161,27 @@ export default function LocationDetailPage() {
             <dl className="mt-4 grid gap-3 text-sm">
               <Metadata label="Day limit" value={formatDb(location?.dayLimit)} />
               <Metadata label="Night limit" value={formatDb(location?.nightLimit)} />
-              <Metadata label="Last seen" value={formatDateTime(device?.lastSeen ?? latestMetric?.uploadedAt)} />
-              <Metadata label="Updated" value={formatRelative(device?.lastSeen ?? latestMetric?.uploadedAt)} />
+              <Metadata label="Last seen" value={formatDateTime(device?.lastSeen ?? healthMetric?.uploadedAt)} />
+              <Metadata label="Updated" value={formatRelative(device?.lastSeen ?? healthMetric?.uploadedAt)} />
             </dl>
           </div>
         </div>
       </section>
 
+      <DateRangeSelector value={selectedRange} onChange={setSelectedRange} loading={rangeMetricsResult.isFetching} />
+
       <section className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          label="Latest hourly average"
+          label="Latest range average"
           value={formatDb(latestMetric?.avgDbLevel ?? latestMetric?.dbLevel)}
-          detail="Most recent backend reading"
+          detail="Most recent reading in selected range"
           icon={<Gauge size={18} aria-hidden="true" />}
           tone={(latestMetric?.avgDbLevel ?? latestMetric?.dbLevel ?? 0) > 55 ? 'warn' : 'good'}
         />
         <MetricCard
           label="Hourly max"
           value={formatDb(latestMetric?.maxDbLevel)}
-          detail="Peak value in the latest metric"
+          detail="Peak value in the selected range metric"
           icon={<Activity size={18} aria-hidden="true" />}
         />
         <MetricCard
@@ -153,7 +193,7 @@ export default function LocationDetailPage() {
         <MetricCard
           label="Exceedances"
           value={formatInteger(latestMetric?.exceedances)}
-          detail="Latest metric exceedance count"
+          detail="Selected range exceedance count"
           icon={<ShieldAlert size={18} aria-hidden="true" />}
           tone={(latestMetric?.exceedances ?? 0) > 0 ? 'warn' : 'good'}
         />
@@ -171,10 +211,10 @@ export default function LocationDetailPage() {
               Device Health
             </h2>
             <dl className="mt-4 grid gap-3 text-sm">
-              <Metadata label="Battery" value={formatNumber(latestMetric?.batteryVoltage, 'V')} />
-              <Metadata label="Panel voltage" value={formatNumber(latestMetric?.panelVoltage, 'V')} />
-              <Metadata label="Signal strength" value={formatNumber(latestMetric?.signalStrength)} />
-              <Metadata label="Data balance" value={formatNumber(latestMetric?.dataBalance)} />
+              <Metadata label="Battery" value={formatNumber(healthMetric?.batteryVoltage, 'V')} />
+              <Metadata label="Panel voltage" value={formatNumber(healthMetric?.panelVoltage, 'V')} />
+              <Metadata label="Signal strength" value={formatNumber(healthMetric?.signalStrength)} />
+              <Metadata label="Data balance" value={formatNumber(healthMetric?.dataBalance)} />
               <Metadata label="Firmware" value={device?.versionNumber ?? 'No data'} />
               <Metadata label="Stage" value={device?.productionStage ?? 'No data'} />
             </dl>

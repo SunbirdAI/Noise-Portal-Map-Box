@@ -73,8 +73,16 @@ The frontend uses the existing backend endpoints:
 - `GET /devices/devices/by-device-id/:deviceName/`
 - `GET /device_metrics/sound-inference-data/by-device-id/:deviceName/`
 - `GET /device_metrics/environmental-parameters/by-device-id/:deviceName/`
+- `GET /device_metrics/device/by-device-id/:deviceName/history/`
+- `GET /device_metrics/device/by-device-id/:deviceName/aggregates/`
+- `GET /device_metrics/environmental-parameters/by-device-id/:deviceName/history/`
+- `GET /device_metrics/sound-inference-data/by-device-id/:deviceName/history/`
 
 The client centralizes request handling in `src/lib/api/client.ts`. Dynamic URL values are encoded, location pagination is followed through `next`, and backend responses are normalized into typed frontend models in `src/lib/api/normalizers.ts`.
+
+Device detail date ranges use backend-supported `start_date`, `end_date`, `page`, and `page_size` parameters. Generic MCU/mobile-style devices use the aggregate endpoint for hourly and daily chart buckets with `timezone=Africa/Kampala`. SEAS AI sensors keep their latest live endpoints for popups and latest telemetry, while the detail page uses the environmental and sound-inference history endpoints for selected-range data. The app does not send unsupported range aliases such as `days`, `from`, or `to`.
+
+SEAS environmental history can be very dense, so the frontend requests the latest stable page of readings for the selected range and shows a notice when the backend reports more records than were loaded. A future AI aggregate endpoint would allow complete long-range SEAS charts without loading thousands of raw readings.
 
 ## CORS
 

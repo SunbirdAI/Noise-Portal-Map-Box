@@ -39,6 +39,28 @@ export interface LocationMetrics {
   daily: NoiseMetric[];
 }
 
+export interface ApiDateRange {
+  startDate?: string;
+  endDate?: string;
+  timezone?: string;
+}
+
+export interface ApiDeviceSummary {
+  id?: string;
+  deviceId?: string;
+  type?: string;
+}
+
+export interface PaginatedData<T> {
+  count: number;
+  next?: string;
+  previous?: string;
+  range?: ApiDateRange;
+  device?: ApiDeviceSummary;
+  results: T[];
+  truncated?: boolean;
+}
+
 export interface DeviceInfo {
   id?: string;
   deviceId: string;

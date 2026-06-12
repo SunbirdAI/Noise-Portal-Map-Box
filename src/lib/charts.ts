@@ -1,4 +1,5 @@
 import type { ChartPoint, HeatmapCell, HourlyTrendPoint, NoiseMetric } from '../models/sensor';
+import { KAMPALA_TIME_ZONE } from './dateRanges';
 
 function parseDate(value?: string): Date | undefined {
   if (!value) {
@@ -23,11 +24,12 @@ function dateKey(value?: string): string {
     return value;
   }
 
-  return date.toISOString().slice(0, 10);
+  return formatKampalaDateKey(date);
 }
 
 export function formatTrendTime(timestamp: number): string {
   return new Intl.DateTimeFormat(undefined, {
+    timeZone: KAMPALA_TIME_ZONE,
     hour: '2-digit',
     minute: '2-digit',
   }).format(timestamp);
@@ -35,6 +37,7 @@ export function formatTrendTime(timestamp: number): string {
 
 export function formatTrendDateTime(timestamp: number): string {
   return new Intl.DateTimeFormat(undefined, {
+    timeZone: KAMPALA_TIME_ZONE,
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
@@ -142,7 +145,7 @@ export function buildHeatmap(metrics: NoiseMetric[]): HeatmapCell[] {
       continue;
     }
 
-    const key = `${dateKey(metric.uploadedAt)}-${date.getHours()}`;
+    const key = `${dateKey(metric.uploadedAt)}-${kampalaHour(date)}`;
     grouped.set(key, [...(grouped.get(key) ?? []), value]);
   }
 
@@ -159,6 +162,28 @@ export function buildHeatmap(metrics: NoiseMetric[]): HeatmapCell[] {
 
 function isNumber(value: number | undefined | null): value is number {
   return value !== undefined && value !== null && Number.isFinite(value);
+}
+
+function formatKampalaDateKey(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: KAMPALA_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? '';
+
+  return `${value('year')}-${value('month')}-${value('day')}`;
+}
+
+function kampalaHour(date: Date): number {
+  const hour = new Intl.DateTimeFormat('en-GB', {
+    timeZone: KAMPALA_TIME_ZONE,
+    hour: '2-digit',
+    hourCycle: 'h23',
+  }).format(date);
+
+  return Number(hour);
 }
 
 function nullableNumber(value: number | undefined | null): number | null {

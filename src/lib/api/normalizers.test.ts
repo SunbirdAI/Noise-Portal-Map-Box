@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeDeviceInfo, normalizeLocationsResponse, normalizeMetric } from './normalizers';
+import {
+  normalizeAiInferencePage,
+  normalizeDeviceInfo,
+  normalizeEnvironmentalReadingPage,
+  normalizeLocationsResponse,
+  normalizeMetric,
+  normalizeMetricPage,
+} from './normalizers';
 
 describe('API normalizers', () => {
   it('normalizes paginated locations and drops invalid coordinates', () => {
@@ -104,6 +111,88 @@ describe('API normalizers', () => {
       medianDbLevel: 45,
       exceedances: 3,
       uploadedAt: '2026-06-08T10:00:00Z',
+    });
+  });
+
+  it('normalizes paginated metric history and range metadata', () => {
+    const page = normalizeMetricPage({
+      count: 2,
+      next: 'http://noise-sensors-dashboard.herokuapp.com/device_metrics/device/by-device-id/SB1006/history/?page=2',
+      range: {
+        start_date: '2026-06-12T00:00:00+03:00',
+        end_date: '2026-06-12T23:59:59+03:00',
+        timezone: 'Africa/Kampala',
+      },
+      device: {
+        id: 'device-uuid',
+        device_id: 'SB1006',
+        type: 'MCU',
+      },
+      results: [
+        {
+          id: 'metric-1',
+          device: 'SB1006',
+          avg_db_level: 40,
+          max_db_level: 55,
+          no_of_exceedances: 1,
+          timestamp: '2026-06-12T00:00:00+03:00',
+        },
+      ],
+    });
+
+    expect(page.count).toBe(2);
+    expect(page.range).toMatchObject({
+      startDate: '2026-06-12T00:00:00+03:00',
+      endDate: '2026-06-12T23:59:59+03:00',
+      timezone: 'Africa/Kampala',
+    });
+    expect(page.device?.deviceId).toBe('SB1006');
+    expect(page.results[0]).toMatchObject({
+      avgDbLevel: 40,
+      maxDbLevel: 55,
+      exceedances: 1,
+      uploadedAt: '2026-06-12T00:00:00+03:00',
+    });
+  });
+
+  it('normalizes paginated AI history pages', () => {
+    const environmental = normalizeEnvironmentalReadingPage({
+      count: 1,
+      results: [
+        {
+          id: 1,
+          device: 'SEAS-1',
+          db_level: 52.14,
+          temperature: 24.5,
+          created_at: '2026-06-12T07:58:24+03:00',
+        },
+      ],
+    });
+    const inference = normalizeAiInferencePage({
+      count: 1,
+      results: [
+        {
+          id: 2,
+          device: 'SEAS-1',
+          inference_class: 'generator',
+          inference_probability: 0.7,
+          inferred_audio_name: '46.wav',
+          created_at: '2026-06-12T07:54:11+03:00',
+        },
+      ],
+    });
+
+    expect(environmental.results[0]).toMatchObject({
+      deviceName: 'SEAS-1',
+      dbLevel: 52.14,
+      temperature: 24.5,
+      createdAt: '2026-06-12T07:58:24+03:00',
+    });
+    expect(inference.results[0]).toMatchObject({
+      deviceName: 'SEAS-1',
+      className: 'generator',
+      probability: 0.7,
+      audioName: '46.wav',
     });
   });
 });

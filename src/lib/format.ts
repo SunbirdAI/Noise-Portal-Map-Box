@@ -1,3 +1,5 @@
+import { KAMPALA_TIME_ZONE } from './dateRanges';
+
 export function formatDb(value?: number): string {
   if (value === undefined || Number.isNaN(value)) {
     return 'No data';
@@ -34,6 +36,7 @@ export function formatDateTime(value?: string): string {
   }
 
   return new Intl.DateTimeFormat(undefined, {
+    timeZone: KAMPALA_TIME_ZONE,
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
