@@ -105,3 +105,8 @@ a {
   min-height: 38px;
   text-decoration: none;
 }
+
+.sensor-popup__link--disabled {
+  background: #e2e8f0;
+  color: #64748b;
+}

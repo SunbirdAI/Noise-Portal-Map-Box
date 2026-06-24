@@ -14,7 +14,7 @@ import {
   locationsQuery,
   sensorRangeDataQuery,
 } from '../lib/api/queries';
-import { aggregateDailyPoints, buildHeatmap, metricsToChartPoints, normalizeHourlyTrendData } from '../lib/charts';
+import { aggregateDailyPoints, buildHeatmap, metricsToDailyChartPoints, normalizeHourlyTrendData } from '../lib/charts';
 import { createPresetDateRange } from '../lib/dateRanges';
 import { selectDetailNoiseMetrics } from '../lib/detailMetrics';
 import { formatDateTime, formatDb, formatInteger, formatNumber, formatRelative } from '../lib/format';
@@ -61,16 +61,17 @@ export default function LocationDetailPage() {
     () => getLatestMetric(availableMetrics) ?? (rangeMetricsResult.isSuccess ? undefined : liveMetric),
     [availableMetrics, liveMetric, rangeMetricsResult.isSuccess],
   );
+  const instantDb = liveMetric?.dbLevel ?? latestMetric?.dbLevel ?? liveData?.latestNoise ?? undefined;
   const healthMetric = liveMetric ?? latestMetric;
   const hourlyPoints = useMemo(() => normalizeHourlyTrendData(availableMetrics), [availableMetrics]);
   const dailyPoints = useMemo(() => {
     if (rangeMetricsResult.isSuccess) {
       const daily = rangeMetricsResult.data.dailyMetrics;
-      return daily.length > 0 ? metricsToChartPoints(daily) : aggregateDailyPoints(availableMetrics);
+      return daily.length > 0 ? metricsToDailyChartPoints(daily) : aggregateDailyPoints(availableMetrics);
     }
 
     const daily = locationMetricsResult.data?.daily ?? [];
-    return daily.length > 0 ? metricsToChartPoints(daily) : aggregateDailyPoints(availableMetrics);
+    return daily.length > 0 ? metricsToDailyChartPoints(daily) : aggregateDailyPoints(availableMetrics);
   }, [availableMetrics, locationMetricsResult.data?.daily, rangeMetricsResult.data?.dailyMetrics, rangeMetricsResult.isSuccess]);
   const heatmap = useMemo(() => buildHeatmap(availableMetrics), [availableMetrics]);
 
@@ -185,10 +186,11 @@ export default function LocationDetailPage() {
           icon={<Activity size={18} aria-hidden="true" />}
         />
         <MetricCard
-          label="Median dB"
-          value={formatDb(latestMetric?.medianDbLevel)}
-          detail="Shown only when supplied by backend"
+          label="Instant dB"
+          value={formatDb(instantDb)}
+          detail="Most recent observed noise reading"
           icon={<RadioTower size={18} aria-hidden="true" />}
+          tone={(instantDb ?? 0) > 55 ? 'warn' : 'good'}
         />
         <MetricCard
           label="Exceedances"

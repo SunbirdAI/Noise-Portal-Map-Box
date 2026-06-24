@@ -27,6 +27,11 @@ function dateKey(value?: string): string {
   return formatKampalaDateKey(date);
 }
 
+function dateLabel(value?: string): string {
+  const date = parseDate(value);
+  return date ? formatKampalaDateLabel(date) : value ?? 'No date';
+}
+
 export function formatTrendTime(timestamp: number): string {
   return new Intl.DateTimeFormat(undefined, {
     timeZone: KAMPALA_TIME_ZONE,
@@ -43,6 +48,23 @@ export function formatTrendDateTime(timestamp: number): string {
     hour: '2-digit',
     minute: '2-digit',
   }).format(timestamp);
+}
+
+export function formatDateKeyLabel(key: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key);
+
+  if (!match) {
+    return key;
+  }
+
+  const [, year, month, day] = match;
+  const date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'UTC',
+    month: 'short',
+    day: 'numeric',
+  }).format(date);
 }
 
 function timeLabel(value?: string): string {
@@ -104,6 +126,26 @@ export function metricsToChartPoints(metrics: NoiseMetric[]): ChartPoint[] {
     }));
 }
 
+export function metricsToDailyChartPoints(metrics: NoiseMetric[]): ChartPoint[] {
+  return [...metrics]
+    .filter((metric) => metric.uploadedAt || metric.dbLevel !== undefined || metric.avgDbLevel !== undefined)
+    .sort((a, b) => {
+      const left = timestampValue(a.uploadedAt) ?? 0;
+      const right = timestampValue(b.uploadedAt) ?? 0;
+      return left - right;
+    })
+    .map((metric, index) => ({
+      key: metric.uploadedAt ?? metric.id ?? String(index),
+      label: dateLabel(metric.uploadedAt),
+      timestamp: metric.uploadedAt,
+      db: metric.dbLevel,
+      avg: metric.avgDbLevel,
+      max: metric.maxDbLevel,
+      median: metric.medianDbLevel,
+      exceedances: metric.exceedances,
+    }));
+}
+
 export function aggregateDailyPoints(metrics: NoiseMetric[]): ChartPoint[] {
   const grouped = new Map<string, NoiseMetric[]>();
 
@@ -121,7 +163,7 @@ export function aggregateDailyPoints(metrics: NoiseMetric[]): ChartPoint[] {
 
       return {
         key,
-        label: key,
+        label: formatDateKeyLabel(key),
         avg: average(avgValues),
         max: max(maxValues),
         median: median(medianValues),
@@ -162,6 +204,14 @@ export function buildHeatmap(metrics: NoiseMetric[]): HeatmapCell[] {
 
 function isNumber(value: number | undefined | null): value is number {
   return value !== undefined && value !== null && Number.isFinite(value);
+}
+
+function formatKampalaDateLabel(date: Date): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: KAMPALA_TIME_ZONE,
+    month: 'short',
+    day: 'numeric',
+  }).format(date);
 }
 
 function formatKampalaDateKey(date: Date): string {
