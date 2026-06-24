@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { countUniqueTrendTimestamps, normalizeHourlyTrendData } from './charts';
+import { aggregateDailyPoints, countUniqueTrendTimestamps, metricsToDailyChartPoints, normalizeHourlyTrendData } from './charts';
 
 describe('chart helpers', () => {
   it('normalizes hourly trend data with sorted numeric timestamps', () => {
@@ -68,5 +68,35 @@ describe('chart helpers', () => {
     expect(points[0].label).toBe(points[1].label);
     expect(points[0].timestamp).not.toBe(points[1].timestamp);
     expect(countUniqueTrendTimestamps(points)).toBe(2);
+  });
+
+  it('formats backend daily metrics as calendar dates instead of midnight times', () => {
+    const points = metricsToDailyChartPoints([
+      {
+        id: 'daily',
+        avgDbLevel: 49,
+        maxDbLevel: 64,
+        uploadedAt: '2026-06-08T00:00:00+03:00',
+      },
+    ]);
+
+    expect(points[0].label).toBe('Jun 8');
+    expect(points[0].label).not.toBe('00:00');
+  });
+
+  it('labels aggregated daily points with readable dates', () => {
+    const points = aggregateDailyPoints([
+      {
+        id: 'hourly',
+        dbLevel: 52,
+        uploadedAt: '2026-06-08T12:00:00+03:00',
+      },
+    ]);
+
+    expect(points[0]).toMatchObject({
+      key: '2026-06-08',
+      label: 'Jun 8',
+      avg: 52,
+    });
   });
 });

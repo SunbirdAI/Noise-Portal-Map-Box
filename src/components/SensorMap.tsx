@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
+import { useNavigate } from 'react-router-dom';
 import { MAPBOX_ACCESS_TOKEN } from '../config/env';
 import type { SensorSummary } from '../models/sensor';
 import { formatDateTime, formatDb, formatNumber } from '../lib/format';
@@ -8,6 +9,7 @@ import { getNoiseCategory, getNoiseClusterMaxExpression, getNoiseColorExpression
 import NoiseLevelLegend from './NoiseLevelLegend';
 
 const appBaseUrl = import.meta.env.BASE_URL === '/' ? '' : import.meta.env.BASE_URL.replace(/\/$/, '');
+const detailLinkSelector = '[data-sensor-detail-link]';
 
 interface SensorMapProps {
   sensors: SensorSummary[];
@@ -20,6 +22,7 @@ const EMPTY_FEATURE_COLLECTION = {
 };
 
 export default function SensorMap({ sensors }: SensorMapProps) {
+  const navigate = useNavigate();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
   const popupRef = useRef<mapboxgl.Popup | null>(null);
@@ -30,6 +33,40 @@ export default function SensorMap({ sensors }: SensorMapProps) {
   const overlapGroupDataRef = useRef(overlapGroupData);
   const overlapGroupsRef = useRef(overlapIndex.groups);
   const sensorsRef = useRef(sensors);
+
+  const handlePopupNavigation = useCallback(
+    (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) {
+        return;
+      }
+
+      const target = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>(detailLinkSelector) : null;
+      const detailRoute = target?.dataset.sensorDetailRoute;
+
+      if (!target || !containerRef.current?.contains(target) || !detailRoute) {
+        return;
+      }
+
+      event.preventDefault();
+      popupRef.current?.remove();
+      navigate(detailRoute);
+    },
+    [navigate],
+  );
+
+  useEffect(() => {
+    const container = containerRef.current;
+
+    if (!container) {
+      return undefined;
+    }
+
+    container.addEventListener('click', handlePopupNavigation);
+
+    return () => {
+      container.removeEventListener('click', handlePopupNavigation);
+    };
+  }, [handlePopupNavigation]);
 
   useEffect(() => {
     dataRef.current = data;
@@ -570,6 +607,11 @@ function renderPopup(properties: Record<string, unknown>): string {
   const dayLimit = numberValue(properties.dayLimit);
   const nightLimit = numberValue(properties.nightLimit);
   const isAiSensor = sensorType === 'AI';
+  const detailRoute = id ? `/locations/${encodeURIComponent(id)}` : '';
+  const detailHref = detailRoute ? `${appBaseUrl}${detailRoute}` : '#';
+  const detailLink = detailRoute
+    ? `<a class="sensor-popup__link" href="${escapeHtml(detailHref)}" data-sensor-detail-link data-sensor-detail-route="${escapeHtml(detailRoute)}">View details</a>`
+    : '<span class="sensor-popup__link sensor-popup__link--disabled" aria-disabled="true">Details unavailable</span>';
 
   return `
     <div class="sensor-popup">
@@ -594,7 +636,7 @@ function renderPopup(properties: Record<string, unknown>): string {
         ${popupRow('Day limit', formatDb(dayLimit))}
         ${popupRow('Night limit', formatDb(nightLimit))}
       </dl>
-      <a class="sensor-popup__link" href="${appBaseUrl}/locations/${encodeURIComponent(id)}">View details</a>
+      ${detailLink}
     </div>
   `;
 }
@@ -626,7 +668,15 @@ function escapeHtml(value: string): string {
 }
 
 function stringValue(value: unknown): string {
-  return typeof value === 'string' ? value : '';
+  if (typeof value === 'string') {
+    return value;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+
+  return '';
 }
 
 function numberValue(value: unknown): number | undefined {

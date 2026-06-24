@@ -12,7 +12,8 @@ import {
 } from 'recharts';
 import type { ChartPoint, HeatmapCell, HourlyTrendPoint } from '../models/sensor';
 import { formatDb } from '../lib/format';
-import { countUniqueTrendTimestamps, formatTrendDateTime, formatTrendTime } from '../lib/charts';
+import { countUniqueTrendTimestamps, formatDateKeyLabel, formatTrendDateTime, formatTrendTime } from '../lib/charts';
+import { getNoiseColor, NOISE_LEVEL_RANGES, NOISE_NO_DATA_COLOR, NOISE_NO_DATA_LABEL } from '../lib/noiseScale';
 
 interface LocationChartsProps {
   hourlyPoints: HourlyTrendPoint[];
@@ -89,11 +90,25 @@ export default function LocationCharts({ hourlyPoints, dailyPoints, heatmap }: L
         </div>
         <ChartFrame empty={dailyPoints.length === 0}>
           <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={dailyPoints} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
+            <BarChart data={dailyPoints} margin={{ left: 0, right: 12, top: 8, bottom: 24 }}>
               <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-              <XAxis dataKey="label" tick={{ fill: '#64748b', fontSize: 12 }} />
+              <XAxis
+                dataKey="label"
+                tick={{ fill: '#64748b', fontSize: 12 }}
+                minTickGap={18}
+                label={{
+                  value: 'Date (Africa/Kampala)',
+                  position: 'insideBottom',
+                  offset: -12,
+                  fill: '#64748b',
+                  fontSize: 12,
+                }}
+              />
               <YAxis tick={{ fill: '#64748b', fontSize: 12 }} width={58} />
-              <Tooltip formatter={(value, name) => (name === 'Exceedances' ? Number(value).toLocaleString() : formatDb(Number(value)))} />
+              <Tooltip
+                formatter={(value, name) => (name === 'Exceedances' ? Number(value).toLocaleString() : formatDb(Number(value)))}
+                labelFormatter={(label) => `Date: ${String(label)}`}
+              />
               <Legend />
               <Bar dataKey="avg" name="Average" fill="#087f8c" radius={[4, 4, 0, 0]} />
               <Bar dataKey="max" name="Max" fill="#d95d39" radius={[4, 4, 0, 0]} />
@@ -111,7 +126,10 @@ export default function LocationCharts({ hourlyPoints, dailyPoints, heatmap }: L
         {heatmap.length === 0 ? (
           <EmptyChart />
         ) : (
-          <HeatmapGrid cells={heatmap} />
+          <>
+            <HeatmapGrid cells={heatmap} />
+            <HeatmapLegend />
+          </>
         )}
       </section>
     </div>
@@ -186,21 +204,65 @@ function HeatmapGrid({ cells }: { cells: HeatmapCell[] }) {
         ))}
         {days.map((day) => (
           <div key={day} className="contents">
-            <div className="pr-2 text-xs font-bold text-slate-500">{day}</div>
+            <div className="pr-2 text-xs font-bold text-slate-500" title={day}>
+              {formatDateKeyLabel(day)}
+            </div>
             {Array.from({ length: 24 }, (_, hour) => {
               const cell = cellByKey.get(`${day}-${hour}`);
+              const label = cell?.avg === undefined ? `${formatDateKeyLabel(day)} ${hour}:00 - No data` : `${formatDateKeyLabel(day)} ${hour}:00 - ${formatDb(cell.avg)}`;
               return (
                 <div
                   key={`${day}-${hour}`}
-                  title={cell?.avg === undefined ? 'No data' : `${day} ${hour}:00 - ${formatDb(cell.avg)}`}
+                  aria-label={label}
+                  title={label}
                   className="h-7 rounded"
-                  style={{ backgroundColor: heatColor(cell?.avg) }}
+                  style={{
+                    backgroundColor: heatColor(cell?.avg),
+                    opacity: cell?.avg === undefined ? 0.24 : 1,
+                  }}
                 />
               );
             })}
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function HeatmapLegend() {
+  return (
+    <div
+      className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3"
+      aria-label="Weekly hour heatmap color key"
+    >
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-extrabold uppercase tracking-wide text-slate-500">Heatmap key</p>
+        <p className="text-xs font-semibold text-slate-500">Average decibels (dB)</p>
+      </div>
+      <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {NOISE_LEVEL_RANGES.map((range) => (
+          <li key={range.id} className="flex min-w-0 items-center gap-2 text-xs text-slate-600">
+            <span
+              className="size-3 shrink-0 rounded-sm"
+              style={{ backgroundColor: range.color }}
+              aria-hidden="true"
+            />
+            <span className="truncate">
+              <span className="font-bold text-slate-700">{range.label}</span>
+              <span className="text-slate-500"> · {range.category}</span>
+            </span>
+          </li>
+        ))}
+        <li className="flex min-w-0 items-center gap-2 text-xs text-slate-600">
+          <span
+            className="size-3 shrink-0 rounded-sm"
+            style={{ backgroundColor: NOISE_NO_DATA_COLOR, opacity: 0.35 }}
+            aria-hidden="true"
+          />
+          <span className="font-bold text-slate-700">{NOISE_NO_DATA_LABEL}</span>
+        </li>
+      </ul>
     </div>
   );
 }
@@ -239,21 +301,5 @@ function formatTooltipLabel(label: unknown): string {
 }
 
 function heatColor(value?: number): string {
-  if (value === undefined) {
-    return '#f1f5f9';
-  }
-
-  if (value < 45) {
-    return '#bbf7d0';
-  }
-
-  if (value < 55) {
-    return '#99f6e4';
-  }
-
-  if (value < 70) {
-    return '#fde68a';
-  }
-
-  return '#fecdd3';
+  return getNoiseColor(value);
 }

@@ -122,6 +122,7 @@ describe('LocationDetailPage', () => {
     expect(await screen.findByRole('heading', { name: 'Busia A' })).toBeInTheDocument();
     expect(screen.getByText('SB1003')).toBeInTheDocument();
     expect(screen.getByText('Latest range average')).toBeInTheDocument();
+    expect(screen.getByText('Instant dB')).toBeInTheDocument();
     expect(await screen.findAllByText('50.0 dB')).not.toHaveLength(0);
     expect(screen.queryByText('Only one reading available.')).not.toBeInTheDocument();
     expect(fetchDeviceMetricAggregates).toHaveBeenCalledWith(
