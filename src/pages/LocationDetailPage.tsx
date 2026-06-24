@@ -1,7 +1,7 @@
 import { Suspense, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router-dom';
-import { Activity, ArrowLeft, Battery, BrainCircuit, CloudSun, Gauge, RadioTower, ShieldAlert } from 'lucide-react';
+import { Activity, ArrowLeft, Battery, BrainCircuit, CloudSun, Download, Gauge, RadioTower, ShieldAlert } from 'lucide-react';
 import Badge from '../components/Badge';
 import DateRangeSelector from '../components/DateRangeSelector';
 import LoadingPanel from '../components/LoadingPanel';
@@ -15,6 +15,7 @@ import {
   sensorRangeDataQuery,
 } from '../lib/api/queries';
 import { aggregateDailyPoints, buildHeatmap, metricsToDailyChartPoints, normalizeHourlyTrendData } from '../lib/charts';
+import { buildLocationCsvRows, downloadCsv, locationCsvFilename } from '../lib/csvExport';
 import { createPresetDateRange } from '../lib/dateRanges';
 import { selectDetailNoiseMetrics } from '../lib/detailMetrics';
 import { formatDateTime, formatDb, formatInteger, formatNumber, formatRelative } from '../lib/format';
@@ -24,6 +25,8 @@ import type { NoiseMetric } from '../models/sensor';
 export default function LocationDetailPage() {
   const { locationId = '' } = useParams();
   const [selectedRange, setSelectedRange] = useState(() => createPresetDateRange('24h'));
+  const [exportingCsv, setExportingCsv] = useState(false);
+  const [exportMessage, setExportMessage] = useState<string | undefined>();
   const locationsResult = useQuery(locationsQuery());
   const locationMetricsResult = useQuery(locationMetricsQuery(locationId));
   const location = useMemo(
@@ -74,6 +77,36 @@ export default function LocationDetailPage() {
     return daily.length > 0 ? metricsToDailyChartPoints(daily) : aggregateDailyPoints(availableMetrics);
   }, [availableMetrics, locationMetricsResult.data?.daily, rangeMetricsResult.data?.dailyMetrics, rangeMetricsResult.isSuccess]);
   const heatmap = useMemo(() => buildHeatmap(availableMetrics), [availableMetrics]);
+  const exportDisabled = exportingCsv || rangeMetricsResult.isFetching || rangeMetricsResult.isError;
+
+  async function handleExportCsv() {
+    setExportMessage(undefined);
+    setExportingCsv(true);
+
+    try {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+      const rows = buildLocationCsvRows({
+        location,
+        deviceName,
+        sensorType: inferredType,
+        metrics: availableMetrics,
+        dataSource: `Selected range: ${selectedRange.label}`,
+      });
+
+      if (rows.length === 0) {
+        setExportMessage('No noise readings are available for this location in the selected range.');
+        return;
+      }
+
+      downloadCsv(locationCsvFilename(location?.village ?? location?.parish, deviceName), rows);
+      setExportMessage(`${rows.length} row${rows.length === 1 ? '' : 's'} exported for ${selectedRange.label}.`);
+    } catch {
+      setExportMessage('CSV export could not be prepared. Please try again.');
+    } finally {
+      setExportingCsv(false);
+    }
+  }
 
   if (locationsResult.isPending && locationMetricsResult.isPending) {
     return <LoadingPanel title="Loading location details" body="Reconstructing this sensor from the direct route and live API data." />;
@@ -170,6 +203,30 @@ export default function LocationDetailPage() {
       </section>
 
       <DateRangeSelector value={selectedRange} onChange={setSelectedRange} loading={rangeMetricsResult.isFetching} />
+
+      <section className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+        <div>
+          <h2 className="text-sm font-extrabold uppercase tracking-[0.08em] text-slate-500">Export data</h2>
+          <p className="mt-1 text-sm text-slate-600">Download CSV rows for this location and the selected date range.</p>
+          {exportMessage ? <p className="mt-2 text-xs font-semibold text-slate-500">{exportMessage}</p> : null}
+          {rangeMetricsResult.isError ? (
+            <p className="mt-2 text-xs font-semibold text-amber-700">Selected range data failed to load, so CSV export is unavailable.</p>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onClick={() => void handleExportCsv()}
+          disabled={exportDisabled}
+          className="inline-flex min-w-[150px] items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-extrabold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {exportingCsv ? (
+            <span className="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true" />
+          ) : (
+            <Download size={16} aria-hidden="true" />
+          )}
+          {rangeMetricsResult.isFetching ? 'Updating data' : exportingCsv ? 'Preparing' : 'Export CSV'}
+        </button>
+      </section>
 
       <section className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard

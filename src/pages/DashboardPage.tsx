@@ -1,12 +1,13 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
-import { Activity, AlertTriangle, Gauge, MapPin, RadioTower } from 'lucide-react';
+import { Activity, AlertTriangle, Download, Gauge, MapPin, RadioTower } from 'lucide-react';
 import clsx from 'clsx';
 import LoadingPanel from '../components/LoadingPanel';
 import MetricCard from '../components/MetricCard';
 import SensorList from '../components/SensorList';
 import StatusPanel from '../components/StatusPanel';
 import { liveSensorQuery, locationsQuery } from '../lib/api/queries';
+import { buildDashboardCsvRows, dashboardCsvFilename, downloadCsv } from '../lib/csvExport';
 import { formatDb, formatInteger } from '../lib/format';
 import { createSensorSummaryFromLiveData } from '../lib/sensors';
 import type { SensorLocation, SensorSummary } from '../models/sensor';
@@ -18,6 +19,8 @@ const EMPTY_LOCATIONS: SensorLocation[] = [];
 
 export default function DashboardPage() {
   const [cityFilter, setCityFilter] = useState('All');
+  const [exportingCsv, setExportingCsv] = useState(false);
+  const [exportMessage, setExportMessage] = useState<string | undefined>();
   const locationsQueryResult = useQuery(locationsQuery());
   const locations = locationsQueryResult.data ?? EMPTY_LOCATIONS;
 
@@ -53,6 +56,30 @@ export default function DashboardPage() {
 
   const stats = useMemo(() => buildDashboardStats(sensors), [sensors]);
   const hasPartialMetricFailures = liveSensorQueries.some((query) => query.isError);
+  const metricsLoading = liveSensorQueries.some((query) => query.isPending);
+
+  async function handleExportCsv() {
+    setExportMessage(undefined);
+    setExportingCsv(true);
+
+    try {
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+      const rows = buildDashboardCsvRows(sensors);
+
+      if (rows.length === 0) {
+        setExportMessage('No live noise data is available for the current filter yet.');
+        return;
+      }
+
+      downloadCsv(dashboardCsvFilename(cityFilter), rows);
+      setExportMessage(`${rows.length} row${rows.length === 1 ? '' : 's'} exported from the current dashboard view.`);
+    } catch {
+      setExportMessage('CSV export could not be prepared. Please try again.');
+    } finally {
+      setExportingCsv(false);
+    }
+  }
 
   if (locationsQueryResult.isPending) {
     return <LoadingPanel title="Loading sensor network" body="Fetching locations from the Sunbird noise sensor API." />;
@@ -136,22 +163,40 @@ export default function DashboardPage() {
                 Live API
               </span>
             </div>
-            <div className="mt-4 flex flex-wrap gap-2" aria-label="City filter">
-              {cities.map((city) => (
+            <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
+              <div className="flex flex-wrap gap-2" aria-label="City filter">
+                {cities.map((city) => (
+                  <button
+                    key={city}
+                    type="button"
+                    onClick={() => setCityFilter(city)}
+                    className={clsx(
+                      'rounded-lg px-3 py-2 text-sm font-bold transition',
+                      cityFilter === city
+                        ? 'bg-slate-900 text-white'
+                        : 'border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-100',
+                    )}
+                  >
+                    {city}
+                  </button>
+                ))}
+              </div>
+              <div className="min-w-[150px]">
                 <button
-                  key={city}
                   type="button"
-                  onClick={() => setCityFilter(city)}
-                  className={clsx(
-                    'rounded-lg px-3 py-2 text-sm font-bold transition',
-                    cityFilter === city
-                      ? 'bg-slate-900 text-white'
-                      : 'border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-100',
-                  )}
+                  onClick={() => void handleExportCsv()}
+                  disabled={exportingCsv || metricsLoading}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-extrabold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {city}
+                  {exportingCsv ? (
+                    <span className="size-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" aria-hidden="true" />
+                  ) : (
+                    <Download size={15} aria-hidden="true" />
+                  )}
+                  {metricsLoading ? 'Loading data' : exportingCsv ? 'Preparing' : 'Export CSV'}
                 </button>
-              ))}
+                {exportMessage ? <p className="mt-2 text-xs font-semibold leading-5 text-slate-500">{exportMessage}</p> : null}
+              </div>
             </div>
           </div>
 
