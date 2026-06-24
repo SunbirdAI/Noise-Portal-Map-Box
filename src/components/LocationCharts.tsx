@@ -89,32 +89,24 @@ export default function LocationCharts({ hourlyPoints, dailyPoints, heatmap }: L
           <p className="mt-1 text-sm text-slate-500">Aggregated daily values when the backend has daily metrics; otherwise derived from recent device readings.</p>
         </div>
         <ChartFrame empty={dailyPoints.length === 0}>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={dailyPoints} margin={{ left: 0, right: 12, top: 8, bottom: 24 }}>
-              <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
-              <XAxis
-                dataKey="label"
-                tick={{ fill: '#64748b', fontSize: 12 }}
-                minTickGap={18}
-                label={{
-                  value: 'Date (Africa/Kampala)',
-                  position: 'insideBottom',
-                  offset: -12,
-                  fill: '#64748b',
-                  fontSize: 12,
-                }}
-              />
-              <YAxis tick={{ fill: '#64748b', fontSize: 12 }} width={58} />
-              <Tooltip
-                formatter={(value, name) => (name === 'Exceedances' ? Number(value).toLocaleString() : formatDb(Number(value)))}
-                labelFormatter={(label) => `Date: ${String(label)}`}
-              />
-              <Legend />
-              <Bar dataKey="avg" name="Average" fill="#087f8c" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="max" name="Max" fill="#d95d39" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="exceedances" name="Exceedances" fill="#f6ae2d" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          <div className="h-full">
+            <ResponsiveContainer width="100%" height={288}>
+              <BarChart data={dailyPoints} margin={{ left: 0, right: 12, top: 8, bottom: 8 }}>
+                <CartesianGrid stroke="#e2e8f0" strokeDasharray="3 3" />
+                <XAxis dataKey="label" tick={{ fill: '#64748b', fontSize: 12 }} minTickGap={18} />
+                <YAxis tick={{ fill: '#64748b', fontSize: 12 }} width={58} />
+                <Tooltip
+                  formatter={(value, name) => (name === 'Exceedances' ? Number(value).toLocaleString() : formatDb(Number(value)))}
+                  labelFormatter={(label) => `Date: ${String(label)}`}
+                />
+                <Legend verticalAlign="bottom" height={34} />
+                <Bar dataKey="avg" name="Average" fill="#087f8c" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="max" name="Max" fill="#d95d39" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="exceedances" name="Exceedances" fill="#f6ae2d" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+            <p className="mt-1 text-center text-xs font-semibold text-slate-500">Date (Africa/Kampala)</p>
+          </div>
         </ChartFrame>
       </section>
 
