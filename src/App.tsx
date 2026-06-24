@@ -9,42 +9,42 @@ const LocationDetailPage = lazy(() => import('./pages/LocationDetailPage'));
 
 const basename = import.meta.env.BASE_URL === '/' ? undefined : import.meta.env.BASE_URL.replace(/\/$/, '');
 
-const App = createBrowserRouter(
-  [
+export function createAppRouter() {
+  return createBrowserRouter(
+    [
+      {
+        path: '/',
+        element: <AppShell />,
+        errorElement: <NotFoundPage />,
+        children: [
+          {
+            index: true,
+            element: (
+              <Suspense fallback={<LoadingPanel title="Loading dashboard" />}>
+                <DashboardPage />
+              </Suspense>
+            ),
+          },
+          {
+            path: 'locations/:locationId',
+            element: (
+              <Suspense fallback={<LoadingPanel title="Loading location details" />}>
+                <LocationDetailPage />
+              </Suspense>
+            ),
+          },
+          {
+            path: '*',
+            element: <NotFoundPage />,
+          },
+        ],
+      },
+    ],
     {
-      path: '/',
-      element: <AppShell />,
-      errorElement: <NotFoundPage />,
-      children: [
-        {
-          index: true,
-          element: (
-            <Suspense fallback={<LoadingPanel title="Loading dashboard" />}>
-              <DashboardPage />
-            </Suspense>
-          ),
-        },
-        {
-          path: 'locations/:locationId',
-          element: (
-            <Suspense fallback={<LoadingPanel title="Loading location details" />}>
-              <LocationDetailPage />
-            </Suspense>
-          ),
-        },
-        {
-          path: '*',
-          element: <NotFoundPage />,
-        },
-      ],
+      basename,
+      future: {
+        v7_relativeSplatPath: true,
+      },
     },
-  ],
-  {
-    basename,
-    future: {
-      v7_relativeSplatPath: true,
-    },
-  },
-);
-
-export default App;
+  );
+}
