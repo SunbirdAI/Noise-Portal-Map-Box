@@ -124,7 +124,7 @@ Before enabling it in GitHub, set these repository settings:
 - Turn on Pages deployment from GitHub Actions in the repository settings.
 - Add `VITE_MAPBOX_ACCESS_TOKEN` as a repository secret.
 
-The app is configured for the project site path `/Noise-Portal-Map-Box/`. If the repository name changes, update the base path in [vite.config.ts](vite.config.ts) and the redirect script in [public/404.html](public/404.html).
+The app is configured for the custom domain root `https://noise.sunbird.ai/`, with `VITE_BASE_PATH=/` and [public/CNAME](public/CNAME). If you move back to a repository project URL, update the base path in [vite.config.ts](vite.config.ts), [.github/workflows/deploy.yml](.github/workflows/deploy.yml), and the redirect script in [public/404.html](public/404.html).
 
 For production hosting, configure:
 
