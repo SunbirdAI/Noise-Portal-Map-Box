@@ -1,4 +1,5 @@
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import LocationDetailPage from './LocationDetailPage';
 import { renderRoute } from '../test/render';
@@ -6,6 +7,7 @@ import {
   fetchAiInference,
   fetchAllLocations,
   fetchDeviceByName,
+  fetchDeviceInsight,
   fetchDeviceMetricAggregates,
   fetchEnvironmentalHistory,
   fetchEnvironmentalReading,
@@ -16,6 +18,7 @@ import {
 vi.mock('../lib/api/client', () => ({
   fetchAllLocations: vi.fn(),
   fetchDeviceByName: vi.fn(),
+  fetchDeviceInsight: vi.fn(),
   fetchDeviceMetricAggregates: vi.fn(),
   fetchEnvironmentalHistory: vi.fn(),
   fetchLocationMetrics: vi.fn(),
@@ -28,6 +31,7 @@ describe('LocationDetailPage', () => {
   beforeEach(() => {
     vi.mocked(fetchAllLocations).mockReset();
     vi.mocked(fetchDeviceByName).mockReset();
+    vi.mocked(fetchDeviceInsight).mockReset();
     vi.mocked(fetchDeviceMetricAggregates).mockReset();
     vi.mocked(fetchEnvironmentalHistory).mockReset();
     vi.mocked(fetchLocationMetrics).mockReset();
@@ -132,5 +136,76 @@ describe('LocationDetailPage', () => {
         timezone: 'Africa/Kampala',
       }),
     );
+  });
+
+  it('keeps existing location sections rendered when the advisor request fails', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetchAllLocations).mockResolvedValue([
+      {
+        id: 'location-1',
+        latitude: 0.3357,
+        longitude: 32.5724,
+        coordinateSource: 'fixed',
+        city: 'Kampala',
+        division: 'Kawempe',
+        parish: 'Katanga',
+        village: 'Busia A',
+        description: 'Category D',
+        dayLimit: 60,
+        nightLimit: 50,
+        deviceName: 'SB1003',
+      },
+    ]);
+    vi.mocked(fetchLocationMetrics).mockResolvedValue({
+      id: 'location-1',
+      deviceName: 'SB1003',
+      hourly: [],
+      daily: [],
+    });
+    vi.mocked(fetchDeviceByName).mockResolvedValue({
+      id: 'location-1',
+      deviceId: 'SB1003',
+      displayName: 'Katanga sensor',
+      sensorType: 'MCU',
+      lastSeen: '2026-06-08T11:46:47Z',
+      metrics: [
+        {
+          id: 'metric-1',
+          dbLevel: 52,
+          avgDbLevel: 46,
+          maxDbLevel: 59,
+          exceedances: 1,
+          batteryVoltage: 3.8,
+          uploadedAt: '2026-06-08T14:46:47+03:00',
+        },
+      ],
+    });
+    vi.mocked(fetchAiInference).mockResolvedValue(undefined);
+    vi.mocked(fetchEnvironmentalReading).mockResolvedValue(undefined);
+    vi.mocked(fetchDeviceMetricAggregates).mockImplementation(async (_deviceName, params) => ({
+      count: 1,
+      results: [
+        {
+          id: `${params.granularity}-1`,
+          avgDbLevel: 47,
+          maxDbLevel: 60,
+          uploadedAt: '2026-06-08T14:00:00+03:00',
+        },
+      ],
+    }));
+    vi.mocked(fetchDeviceInsight).mockRejectedValue(new Error('Advisor failed'));
+
+    renderRoute('/locations/:locationId', <LocationDetailPage />, '/locations/location-1');
+
+    expect(await screen.findByRole('heading', { name: 'Busia A' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Explain this location noise data' }));
+
+    expect(await screen.findByText(/The summary is unavailable right now/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Busia A' })).toBeInTheDocument();
+    expect(screen.getByText('Export data')).toBeInTheDocument();
+    expect(screen.getByText('Latest range average')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Hourly Noise Trend' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Device Health' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'AI Inference' })).toBeInTheDocument();
   });
 });
