@@ -2,9 +2,13 @@ import { extractCoordinates, toNumber } from '../coordinates';
 import { detectSensorType } from '../sensors';
 import type {
   AiInference,
+  AdvisorAudience,
+  AdvisorLanguage,
+  AdvisorStatus,
   DeviceInfo,
   EnvironmentalReading,
   LocationMetrics,
+  NoiseAdvisorInsight,
   NoiseMetric,
   PaginatedData,
   SensorLocation,
@@ -58,6 +62,40 @@ function booleanField(raw: RawRecord, keys: string[]): boolean | undefined {
   }
 
   return undefined;
+}
+
+function nullableStringField(raw: RawRecord, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = raw[key];
+
+    if (value === null) {
+      return null;
+    }
+
+    if (typeof value === 'string' && value.trim() !== '') {
+      return value;
+    }
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return String(value);
+    }
+  }
+
+  return null;
+}
+
+function advisorStatusField(raw: RawRecord): AdvisorStatus {
+  const value = stringField(raw, ['status']);
+
+  return value === 'ready' || value === 'generating' || value === 'empty' || value === 'unavailable' ? value : 'unavailable';
+}
+
+function advisorLanguageField(raw: RawRecord): AdvisorLanguage {
+  return stringField(raw, ['lang', 'language']) === 'lug' ? 'lug' : 'en';
+}
+
+function advisorAudienceField(raw: RawRecord): AdvisorAudience {
+  return stringField(raw, ['audience']) === 'official' ? 'official' : 'resident';
 }
 
 export function normalizeLocation(rawValue: unknown): SensorLocation | undefined {
@@ -276,6 +314,21 @@ export function normalizeAiInference(payload: unknown): AiInference | undefined 
     className: stringField(raw, ['inference_class', 'class_name']),
     audioName: stringField(raw, ['inferred_audio_name', 'audio_name']),
     createdAt: stringField(raw, ['created_at', 'timestamp']),
+  };
+}
+
+export function normalizeAdvisorInsight(payload: unknown): NoiseAdvisorInsight {
+  const raw = asRecord(payload);
+
+  return {
+    deviceId: stringField(raw, ['device_id', 'device', 'device_name', 'deviceId']) ?? '',
+    lang: advisorLanguageField(raw),
+    audience: advisorAudienceField(raw),
+    insight: nullableStringField(raw, ['insight']),
+    status: advisorStatusField(raw),
+    cached: booleanField(raw, ['cached']) ?? false,
+    generatedAt: nullableStringField(raw, ['generated_at', 'generatedAt']),
+    range: normalizeDateRange(raw.range),
   };
 }
 

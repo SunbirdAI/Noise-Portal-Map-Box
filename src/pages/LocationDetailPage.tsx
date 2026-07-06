@@ -6,6 +6,7 @@ import Badge from '../components/Badge';
 import DateRangeSelector from '../components/DateRangeSelector';
 import LoadingPanel from '../components/LoadingPanel';
 import MetricCard from '../components/MetricCard';
+import NoiseAdvisorPanel from '../components/NoiseAdvisorPanel';
 import StatusPanel from '../components/StatusPanel';
 import LocationCharts from '../components/LocationCharts';
 import {
@@ -257,6 +258,8 @@ export default function LocationDetailPage() {
           tone={(latestMetric?.exceedances ?? 0) > 0 ? 'warn' : 'good'}
         />
       </section>
+
+      <NoiseAdvisorPanel deviceName={deviceName} />
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Suspense fallback={<LoadingPanel title="Loading charts" />}>

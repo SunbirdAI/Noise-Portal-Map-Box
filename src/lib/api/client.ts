@@ -1,9 +1,12 @@
 import { API_BASE_URL, DEFAULT_API_BASE_URL } from '../../config/env';
 import type {
   AiInference,
+  AdvisorAudience,
+  AdvisorLanguage,
   DeviceInfo,
   EnvironmentalReading,
   LocationMetrics,
+  NoiseAdvisorInsight,
   NoiseMetric,
   PaginatedData,
   SensorLocation,
@@ -11,6 +14,7 @@ import type {
 import { ApiError } from './errors';
 import {
   extractNextPage,
+  normalizeAdvisorInsight,
   normalizeAiInference,
   normalizeAiInferencePage,
   normalizeDeviceInfo,
@@ -167,6 +171,17 @@ export async function fetchAiInference(deviceName: string): Promise<AiInference 
   const encodedDeviceName = encodeURIComponent(deviceName);
   const payload = await requestJson<unknown>(`/device_metrics/sound-inference-data/by-device-id/${encodedDeviceName}/`);
   return normalizeAiInference(payload);
+}
+
+export async function fetchDeviceInsight(
+  deviceName: string,
+  lang: AdvisorLanguage,
+  audience: AdvisorAudience,
+): Promise<NoiseAdvisorInsight> {
+  const encodedDeviceName = encodeURIComponent(deviceName);
+  const query = new URLSearchParams({ lang, audience });
+  const payload = await requestJson<unknown>(`/advisor/device/by-device-id/${encodedDeviceName}/insight/?${query}`, HISTORY_TIMEOUT_MS);
+  return normalizeAdvisorInsight(payload);
 }
 
 export async function fetchEnvironmentalReading(deviceName: string): Promise<EnvironmentalReading | undefined> {

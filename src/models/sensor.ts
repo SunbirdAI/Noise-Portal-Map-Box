@@ -45,6 +45,23 @@ export interface ApiDateRange {
   timezone?: string;
 }
 
+export type AdvisorStatus = 'ready' | 'generating' | 'empty' | 'unavailable';
+
+export type AdvisorLanguage = 'en' | 'lug';
+
+export type AdvisorAudience = 'resident' | 'official';
+
+export interface NoiseAdvisorInsight {
+  deviceId: string;
+  lang: AdvisorLanguage;
+  audience: AdvisorAudience;
+  insight: string | null;
+  status: AdvisorStatus;
+  cached: boolean;
+  generatedAt: string | null;
+  range?: ApiDateRange;
+}
+
 export interface ApiDeviceSummary {
   id?: string;
   deviceId?: string;

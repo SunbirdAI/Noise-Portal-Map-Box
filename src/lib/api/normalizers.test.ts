@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   normalizeAiInferencePage,
+  normalizeAdvisorInsight,
   normalizeDeviceInfo,
   normalizeEnvironmentalReadingPage,
   normalizeLocationsResponse,
@@ -193,6 +194,36 @@ describe('API normalizers', () => {
       className: 'generator',
       probability: 0.7,
       audioName: '46.wav',
+    });
+  });
+
+  it('normalizes advisor insight payloads', () => {
+    expect(
+      normalizeAdvisorInsight({
+        device_id: 'SB1003',
+        lang: 'lug',
+        audience: 'official',
+        insight: 'Eddoboozi liri waggulu mu budde obumu.',
+        status: 'ready',
+        cached: true,
+        generated_at: '2026-06-12T07:58:24+03:00',
+        range: {
+          start_date: '2026-06-11T07:58:24+03:00',
+          end_date: '2026-06-12T07:58:24+03:00',
+        },
+      }),
+    ).toMatchObject({
+      deviceId: 'SB1003',
+      lang: 'lug',
+      audience: 'official',
+      insight: 'Eddoboozi liri waggulu mu budde obumu.',
+      status: 'ready',
+      cached: true,
+      generatedAt: '2026-06-12T07:58:24+03:00',
+      range: {
+        startDate: '2026-06-11T07:58:24+03:00',
+        endDate: '2026-06-12T07:58:24+03:00',
+      },
     });
   });
 });

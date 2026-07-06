@@ -3,12 +3,16 @@ import {
   fetchAiInference,
   fetchAllLocations,
   fetchDeviceByName,
+  fetchDeviceInsight,
   fetchEnvironmentalReading,
   fetchLocationMetrics,
 } from './client';
 import { fetchSensorLiveData } from '../liveSensorData';
 import { fetchSensorRangeData } from '../rangeSensorData';
 import type { DateRangeSelection } from '../dateRanges';
+import type { AdvisorAudience, AdvisorLanguage, NoiseAdvisorInsight } from '../../models/sensor';
+
+const ADVISOR_GENERATING_RETRY_MS = 4_000;
 
 export const locationsQuery = () =>
   queryOptions({
@@ -56,6 +60,29 @@ export const aiInferenceQuery = (deviceName: string) =>
     staleTime: 60_000,
     enabled: Boolean(deviceName),
     retry: false,
+  });
+
+export const advisorQuery = (
+  deviceName: string,
+  lang: AdvisorLanguage,
+  audience: AdvisorAudience,
+  enabled = Boolean(deviceName),
+) =>
+  queryOptions({
+    queryKey: ['advisorInsight', deviceName, lang, audience],
+    queryFn: () => fetchDeviceInsight(deviceName, lang, audience),
+    staleTime: 5 * 60_000,
+    enabled: Boolean(deviceName) && enabled,
+    retry: false,
+    refetchInterval: (query) => {
+      const data = query.state.data as NoiseAdvisorInsight | undefined;
+
+      if (data?.status === 'generating' && query.state.dataUpdateCount <= 1 && query.state.fetchStatus !== 'fetching') {
+        return ADVISOR_GENERATING_RETRY_MS;
+      }
+
+      return false;
+    },
   });
 
 export const environmentalQuery = (deviceName: string) =>
