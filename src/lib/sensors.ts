@@ -8,22 +8,16 @@ export function isMobileDeviceName(deviceName?: string): boolean {
   return /^mobile/i.test(deviceName?.trim() ?? '');
 }
 
-export function detectSensorType(input: {
-  deviceName?: string;
-  deviceType?: string;
-  uploadAddress?: string;
-  metricsUrl?: string;
-}): SensorType {
-  const tokens = [input.deviceName, input.deviceType, input.uploadAddress, input.metricsUrl]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
+export function isMcuDeviceName(deviceName?: string): boolean {
+  return /^sb\d+/i.test(deviceName?.trim() ?? '');
+}
 
+function sensorTypeFromTokens(tokens: string): SensorType | undefined {
   if (!tokens.trim()) {
-    return 'Unknown';
+    return undefined;
   }
 
-  if (isSeasDeviceName(input.deviceName) || /\b(ai|saes|seas)\b/.test(tokens) || tokens.includes('/audio/')) {
+  if (/\b(ai|saes|seas)\b/.test(tokens) || tokens.includes('/audio/')) {
     return 'AI';
   }
 
@@ -31,11 +25,27 @@ export function detectSensorType(input: {
     return 'MOBILE';
   }
 
-  if (tokens.includes('mcu') || /^sb\d+/.test(input.deviceName?.toLowerCase() ?? '')) {
+  if (tokens.includes('mcu')) {
     return 'MCU';
   }
 
-  return 'Unknown';
+  return undefined;
+}
+
+export function detectSensorType(input: {
+  deviceName?: string;
+  deviceType?: string;
+  uploadAddress?: string;
+  metricsUrl?: string;
+}): SensorType {
+  return (
+    sensorTypeFromTokens(input.deviceType?.toLowerCase() ?? '') ??
+    (isSeasDeviceName(input.deviceName) ? 'AI' : undefined) ??
+    (isMobileDeviceName(input.deviceName) ? 'MOBILE' : undefined) ??
+    (isMcuDeviceName(input.deviceName) ? 'MCU' : undefined) ??
+    sensorTypeFromTokens([input.uploadAddress, input.metricsUrl].filter(Boolean).join(' ').toLowerCase()) ??
+    'Unknown'
+  );
 }
 
 export function getLatestMetric(metrics: NoiseMetric[]): NoiseMetric | undefined {

@@ -164,11 +164,12 @@ export default function DashboardPage() {
               </span>
             </div>
             <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
-              <div className="flex flex-wrap gap-2" aria-label="City filter">
+              <div className="flex flex-wrap gap-2" role="group" aria-label="City filter">
                 {cities.map((city) => (
                   <button
                     key={city}
                     type="button"
+                    aria-pressed={cityFilter === city}
                     onClick={() => setCityFilter(city)}
                     className={clsx(
                       'rounded-lg px-3 py-2 text-sm font-bold transition',

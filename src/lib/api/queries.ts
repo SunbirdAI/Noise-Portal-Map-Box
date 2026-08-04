@@ -13,6 +13,7 @@ import type { DateRangeSelection } from '../dateRanges';
 import type { AdvisorAudience, AdvisorLanguage, NoiseAdvisorInsight } from '../../models/sensor';
 
 const ADVISOR_GENERATING_RETRY_MS = 4_000;
+const LIVE_SENSOR_POLL_MS = 60_000;
 
 export const locationsQuery = () =>
   queryOptions({
@@ -43,6 +44,12 @@ export const liveSensorQuery = (deviceName: string) =>
     queryFn: () => fetchSensorLiveData(deviceName),
     staleTime: 45_000,
     enabled: Boolean(deviceName),
+    // Poll for fresh readings; refetchInterval already pauses itself while the
+    // tab is hidden (refetchIntervalInBackground defaults to false), and
+    // 'always' forces an immediate refetch the moment the tab regains focus,
+    // overriding the app-wide refetchOnWindowFocus: false in main.tsx.
+    refetchInterval: LIVE_SENSOR_POLL_MS,
+    refetchOnWindowFocus: 'always',
   });
 
 export const sensorRangeDataQuery = (deviceName: string, range: DateRangeSelection) =>

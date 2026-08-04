@@ -247,12 +247,27 @@ function getKampalaParts(date: Date) {
   };
 }
 
+const FORMULA_TRIGGER_PATTERN = /^[=+\-@\t\r]/;
+const PLAIN_NUMBER_PATTERN = /^[+-]?\d+(\.\d+)?$/;
+
+function isFormulaInjectionRisk(text: string): boolean {
+  return FORMULA_TRIGGER_PATTERN.test(text) && !PLAIN_NUMBER_PATTERN.test(text);
+}
+
 function escapeCsvCell(value: CsvCell): string {
   if (value === null || value === undefined) {
     return '';
   }
 
-  const text = String(value);
+  let text = String(value);
+
+  // Spreadsheet apps (Excel, Sheets) can execute a cell that opens with
+  // =, +, -, @, a tab, or a carriage return as a formula. Prefixing with a
+  // single quote forces it to render as inert text. Plain numbers (e.g. a
+  // negative latitude) are left untouched so they still import as numbers.
+  if (isFormulaInjectionRisk(text)) {
+    text = `'${text}`;
+  }
 
   if (/[",\r\n]/.test(text)) {
     return `"${text.replace(/"/g, '""')}"`;

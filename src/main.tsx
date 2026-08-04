@@ -35,7 +35,7 @@ const appRouter = createAppRouter();
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <RouterProvider router={appRouter} future={{ v7_startTransition: true }} />
+      <RouterProvider router={appRouter} />
     </QueryClientProvider>
   </React.StrictMode>,
 );

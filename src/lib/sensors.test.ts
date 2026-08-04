@@ -10,6 +10,29 @@ describe('sensor helpers', () => {
     expect(detectSensorType({ deviceName: '' })).toBe('Unknown');
   });
 
+  it('trusts an explicit MCU device_type over an /audio/ upload address', () => {
+    // Real backend shape for SB5: an MCU device whose metrics happen to be
+    // relayed through an /audio/ upload endpoint. The explicit device_type
+    // must win so MCU devices don't get misclassified as AI sensors.
+    expect(
+      detectSensorType({
+        deviceName: 'SB5',
+        deviceType: 'MCU',
+        uploadAddress: 'https://noise-sensors-dashboard.herokuapp.com/audio/upload/',
+      }),
+    ).toBe('MCU');
+  });
+
+  it('falls back to device-name rules when device_type is missing', () => {
+    expect(detectSensorType({ deviceName: 'SEAS-2' })).toBe('AI');
+    expect(detectSensorType({ deviceName: 'SB1006' })).toBe('MCU');
+  });
+
+  it('only uses URL/address hints as a last resort', () => {
+    expect(detectSensorType({ uploadAddress: 'https://example.com/audio/' })).toBe('AI');
+    expect(detectSensorType({ metricsUrl: 'https://example.com/mobile/metrics' })).toBe('MOBILE');
+  });
+
   it('selects the newest metric with data', () => {
     expect(
       getLatestMetric([

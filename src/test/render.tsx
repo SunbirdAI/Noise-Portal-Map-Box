@@ -15,7 +15,7 @@ export function renderWithProviders(ui: ReactElement, route = '/') {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[route]} future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+      <MemoryRouter initialEntries={[route]}>
         {ui}
       </MemoryRouter>
     </QueryClientProvider>,
@@ -34,7 +34,7 @@ export function renderRoute(path: string, element: ReactElement, route: string) 
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[route]} future={{ v7_relativeSplatPath: true, v7_startTransition: true }}>
+      <MemoryRouter initialEntries={[route]}>
         <Routes>
           <Route path={path} element={element} />
         </Routes>
