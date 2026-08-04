@@ -42,9 +42,6 @@ export function createAppRouter() {
     ],
     {
       basename,
-      future: {
-        v7_relativeSplatPath: true,
-      },
     },
   );
 }

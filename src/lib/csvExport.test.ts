@@ -80,6 +80,26 @@ describe('CSV export helpers', () => {
     });
   });
 
+  it('neutralizes spreadsheet formula injection in exported text cells', () => {
+    expect(serializeCsv([{ 'Location Name': "=cmd|'/C calc'!A0" }])).toContain("'=cmd|'/C calc'!A0");
+    expect(serializeCsv([{ 'Location Name': '+HYPERLINK("http://evil.example","click")' }])).toContain(
+      '"\'+HYPERLINK(""http://evil.example"",""click"")"',
+    );
+    expect(serializeCsv([{ 'Location Name': "-2+3+cmd|' /C calc'!A0" }])).toContain("'-2+3+cmd|' /C calc'!A0");
+    expect(serializeCsv([{ 'Location Name': '@SUM(1+1)' }])).toContain("'@SUM(1+1)");
+    expect(serializeCsv([{ 'Location Name': '\ttabbed payload' }])).toContain("'\ttabbed payload");
+    expect(serializeCsv([{ 'Location Name': '\rcarriage payload' }])).toContain('"\'\rcarriage payload"');
+  });
+
+  it('does not mangle plain numeric cells such as a negative coordinate', () => {
+    const csv = serializeCsv([{ Latitude: '-1.234567', 'Exceedance Count': '-3' }]);
+
+    expect(csv).toContain('-1.234567');
+    expect(csv).not.toContain("'-1.234567");
+    expect(csv).toContain('-3');
+    expect(csv).not.toContain("'-3");
+  });
+
   it('preserves valid zero dB readings in location exports', () => {
     const rows = buildLocationCsvRows({
       location: {
