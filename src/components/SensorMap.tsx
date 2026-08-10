@@ -433,6 +433,7 @@ function buildFeatureCollection(sensors: SensorSummary[], sensorMeta: Map<string
           inferenceProbability: sensor.inference?.probability ?? null,
           dayLimit: sensor.dayLimit ?? null,
           nightLimit: sensor.nightLimit ?? null,
+          detailRoute: sensor.detailRoute ?? `/locations/${encodeURIComponent(sensor.deviceUuid ?? sensor.id)}`,
         },
       };
     }),
@@ -541,6 +542,7 @@ function buildSpiderPointFeature(
       inferenceProbability: sensor.inference?.probability ?? null,
       dayLimit: sensor.dayLimit ?? null,
       nightLimit: sensor.nightLimit ?? null,
+      detailRoute: sensor.detailRoute ?? `/locations/${encodeURIComponent(sensor.deviceUuid ?? sensor.id)}`,
     },
   };
 }
@@ -607,7 +609,7 @@ function renderPopup(properties: Record<string, unknown>): string {
   const dayLimit = numberValue(properties.dayLimit);
   const nightLimit = numberValue(properties.nightLimit);
   const isAiSensor = sensorType === 'AI';
-  const detailRoute = id ? `/locations/${encodeURIComponent(id)}` : '';
+  const detailRoute = stringValue(properties.detailRoute) || (id ? `/locations/${encodeURIComponent(id)}` : '');
   const detailHref = detailRoute ? `${appBaseUrl}${detailRoute}` : '#';
   const detailLink = detailRoute
     ? `<a class="sensor-popup__link" href="${escapeHtml(detailHref)}" data-sensor-detail-link data-sensor-detail-route="${escapeHtml(detailRoute)}">View details</a>`

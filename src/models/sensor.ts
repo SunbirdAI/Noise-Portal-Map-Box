@@ -4,6 +4,9 @@ export type CoordinateSource = 'fixed' | 'mobile';
 
 export interface SensorLocation {
   id: string;
+  locationId?: string;
+  deviceUuid?: string;
+  detailRoute?: string;
   latitude: number;
   longitude: number;
   coordinateSource: CoordinateSource;

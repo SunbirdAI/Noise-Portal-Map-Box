@@ -4,12 +4,15 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { MessageSquare, RefreshCw } from 'lucide-react';
 import Badge from './Badge';
-import { advisorQuery } from '../lib/api/queries';
+import { scopedAdvisorQuery } from '../lib/api/v2Queries';
 import { formatDateTime, formatRelative } from '../lib/format';
+import type { ApiScope } from '../models/portal';
+import { PUBLIC_SCOPE } from '../models/portal';
 import type { AdvisorAudience, AdvisorLanguage, NoiseAdvisorInsight } from '../models/sensor';
 
 interface NoiseAdvisorPanelProps {
-  deviceName: string;
+  deviceId: string;
+  scope?: ApiScope;
 }
 
 interface PanelCopy {
@@ -100,13 +103,13 @@ const COPY: Record<AdvisorLanguage, PanelCopy> = {
   },
 };
 
-export default function NoiseAdvisorPanel({ deviceName }: NoiseAdvisorPanelProps) {
+export default function NoiseAdvisorPanel({ deviceId, scope = PUBLIC_SCOPE }: NoiseAdvisorPanelProps) {
   const [lang, setLang] = useState<AdvisorLanguage>('en');
   const [audience, setAudience] = useState<AdvisorAudience>('resident');
   const [requested, setRequested] = useState(false);
   const copy = COPY[lang];
-  const hasDevice = Boolean(deviceName);
-  const advisorOptions = advisorQuery(deviceName, lang, audience, requested);
+  const hasDevice = Boolean(deviceId);
+  const advisorOptions = scopedAdvisorQuery(scope, deviceId, lang, audience, requested);
   const advisorResult = useQuery(advisorOptions);
   const queryClient = useQueryClient();
   const queryState = queryClient.getQueryState<NoiseAdvisorInsight>(advisorOptions.queryKey);

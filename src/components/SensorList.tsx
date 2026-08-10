@@ -33,7 +33,7 @@ export default function SensorList({ sensors }: SensorListProps) {
         return (
           <Link
             key={sensor.id}
-            to={`/locations/${sensor.id}`}
+            to={sensor.detailRoute ?? `/locations/${sensor.deviceUuid ?? sensor.id}`}
             className="group rounded-lg border border-slate-200 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-soft"
           >
             <div className="flex items-start justify-between gap-4">

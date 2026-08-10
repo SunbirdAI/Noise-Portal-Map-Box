@@ -21,6 +21,10 @@ function sensorTypeFromTokens(tokens: string): SensorType | undefined {
     return 'AI';
   }
 
+  if (/\bmpu\b/.test(tokens)) {
+    return 'AI';
+  }
+
   if (tokens.includes('mobile') || tokens.includes('phone') || tokens.includes('android')) {
     return 'MOBILE';
   }

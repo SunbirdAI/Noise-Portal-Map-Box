@@ -135,7 +135,7 @@ export function normalizeMetric(rawValue: unknown): NoiseMetric {
 
   return {
     id: stringField(raw, ['id']),
-    deviceName: stringField(raw, ['device', 'device_name', 'deviceId']),
+    deviceName: stringField(raw, ['device', 'device_id', 'device_name', 'deviceId']),
     dbLevel: numberField(raw, ['db_level', 'dbLevel', 'db', 'leq', 'value']),
     avgDbLevel: numberField(raw, [
       'avg_db_level',
@@ -309,7 +309,7 @@ export function normalizeAiInference(payload: unknown): AiInference | undefined 
 
   return {
     id: stringField(raw, ['id']) ?? numberField(raw, ['id']),
-    deviceName: stringField(raw, ['device', 'device_name']),
+    deviceName: stringField(raw, ['device', 'device_id', 'device_name']),
     probability: numberField(raw, ['inference_probability', 'probability']),
     className: stringField(raw, ['inference_class', 'class_name']),
     audioName: stringField(raw, ['inferred_audio_name', 'audio_name']),
@@ -341,7 +341,7 @@ export function normalizeEnvironmentalReading(payload: unknown): EnvironmentalRe
 
   return {
     id: stringField(raw, ['id']) ?? numberField(raw, ['id']),
-    deviceName: stringField(raw, ['device', 'device_name']),
+    deviceName: stringField(raw, ['device', 'device_id', 'device_name']),
     temperature: numberField(raw, ['temperature']),
     pressure: numberField(raw, ['pressure']),
     humidity: numberField(raw, ['humidity']),
