@@ -45,7 +45,7 @@ The browser calls exact relative paths such as `/api/v2/auth/me/`. Vite proxies 
 
 | Variable | Required | Meaning |
 | --- | --- | --- |
-| `VITE_API_ORIGIN` | Yes; normally empty | Empty means same-origin `/api/v2/...`. A complete backend origin is allowed only for public-only development/diagnostics. Do not set `/api`; API functions already use exact `/api/v2/...` paths. |
+| `VITE_API_ORIGIN` | Yes; normally empty | Empty/unset means same-origin `/api/v2/...`. The complete Heroku origin is allowed only for public-only cross-origin deployments. Never set `/api`; API functions already use exact `/api/v2/...` paths and the configuration validator rejects paths. |
 | `VITE_PARTNER_PORTAL_ENABLED` | Yes | `true` for a same-origin deployment; `false` for static public-only builds. A direct `VITE_API_ORIGIN` always disables partner auth. |
 | `VITE_MAPBOX_ACCESS_TOKEN` | Recommended | Public browser token used by Mapbox GL. The dashboard provides a configuration state when absent. |
 | `VITE_PASSWORD_RESET_URL` | Optional | Existing password-reset page. “Forgot password?” is hidden when this is empty. |
@@ -75,7 +75,9 @@ All active screens use API v2:
 - authentication: `/api/v2/auth/...`;
 - partner data: `/api/v2/portal/organizations/<organization_uuid>/...`.
 
-Every request uses `credentials: "include"`. Mutating requests initialize `/api/v2/auth/csrf/`, read the host-owned `csrftoken` cookie, and send `X-CSRFToken`. The Django `sessionid` remains an HttpOnly cookie. Passwords, sessions, CSRF values and invitation tokens are never written to `localStorage` or `sessionStorage`.
+Credential mode is derived from the fully resolved request URL. Same-origin requests use `credentials: "include"`; direct cross-origin public requests use `credentials: "omit"`. The frontend never sends `Access-Control-Allow-Credentials` as a request header because that is a server-controlled response header.
+
+In same-origin partner mode, mutating requests initialize `/api/v2/auth/csrf/`, read the host-owned `csrftoken` cookie, and send `X-CSRFToken`. The Django `sessionid` remains an HttpOnly cookie. Passwords, sessions, CSRF values and invitation tokens are never written to `localStorage` or `sessionStorage`. Cross-origin builds are public-only: partner UI is disabled and the API client rejects any cross-origin path outside `/api/v2/public/...`.
 
 Frontend membership checks prevent out-of-scope organization queries and improve the user experience, but they are not an authorization boundary. Django must continue returning 404 for out-of-scope resources and enforcing every permission.
 
@@ -113,7 +115,15 @@ Production Django must include `https://noise.sunbird.ai` in `CSRF_TRUSTED_ORIGI
 
 ### GitHub Pages limitation
 
-The existing GitHub Pages workflow builds with a direct Heroku `VITE_API_ORIGIN` and `VITE_PARTNER_PORTAL_ENABLED=false`. It is explicitly public-only and hides login/invitation entry points. GitHub Pages cannot run this same-origin session proxy, so partner login must remain disabled there unless an independent edge proxy is placed in front of the custom domain. Do not point the Cloudflare and GitHub Pages deployments at the same production hostname simultaneously.
+The existing GitHub Pages workflow uses:
+
+```dotenv
+VITE_API_ORIGIN=https://noise-sensors-dashboard.herokuapp.com
+VITE_PARTNER_PORTAL_ENABLED=false
+VITE_BASE_PATH=/
+```
+
+It is explicitly public-only and hides login/invitation entry points. Public browser requests go directly to Heroku and omit credentials, avoiding credentialed-CORS requirements. GitHub Pages cannot execute `functions/api/[[path]].js`; `/api/v2/...` on the GitHub Pages origin would be a static-host 404. Partner login therefore remains disabled until the site moves to Cloudflare Pages or another same-origin proxy host. Do not point Cloudflare and GitHub Pages deployments at the same production hostname simultaneously.
 
 ## Authentication behavior
 

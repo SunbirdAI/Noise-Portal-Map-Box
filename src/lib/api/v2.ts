@@ -113,6 +113,14 @@ async function withCurrentRequestSlot<T>(request: () => Promise<T>): Promise<T> 
 
 export async function apiRequest<T>(pathOrUrl: string, options: RequestOptions = {}): Promise<T> {
   const url = resolveApiUrl(pathOrUrl);
+  const requestUrl = new URL(url, window.location.origin);
+  const credentials: RequestCredentials =
+    requestUrl.origin === window.location.origin ? 'include' : 'omit';
+
+  if (credentials === 'omit' && !requestUrl.pathname.startsWith('/api/v2/public/')) {
+    throw new ApiError('Authenticated API requests require a same-origin deployment.', url);
+  }
+
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), options.timeoutMs ?? REQUEST_TIMEOUT_MS);
   const headers = new Headers(options.headers);
@@ -128,7 +136,7 @@ export async function apiRequest<T>(pathOrUrl: string, options: RequestOptions =
     const response = await fetch(url, {
       ...options,
       body,
-      credentials: 'include',
+      credentials,
       headers,
       signal: controller.signal,
     });
