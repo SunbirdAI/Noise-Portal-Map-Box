@@ -68,7 +68,7 @@ export default function AppShell() {
             >
               <Github size={18} aria-hidden="true" />
             </a>
-            {auth.status === 'authenticated' ? (
+            {PARTNER_PORTAL_ENABLED && auth.status === 'authenticated' ? (
               <>
                 {activeMemberships.length > 0 ? (
                   <NavLink
