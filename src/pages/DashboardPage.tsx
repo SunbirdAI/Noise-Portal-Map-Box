@@ -1,57 +1,82 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { Activity, AlertTriangle, Download, Gauge, MapPin, RadioTower } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import clsx from 'clsx';
 import LoadingPanel from '../components/LoadingPanel';
 import MetricCard from '../components/MetricCard';
 import SensorList from '../components/SensorList';
 import StatusPanel from '../components/StatusPanel';
-import { liveSensorQuery, locationsQuery } from '../lib/api/queries';
+import { scopedDevicesQuery, scopedLiveSensorQuery } from '../lib/api/v2Queries';
 import { buildDashboardCsvRows, dashboardCsvFilename, downloadCsv } from '../lib/csvExport';
 import { formatDb, formatInteger } from '../lib/format';
 import { createSensorSummaryFromLiveData } from '../lib/sensors';
-import type { SensorLocation, SensorSummary } from '../models/sensor';
+import type { ApiScope, ScopedDevice } from '../models/portal';
+import { PUBLIC_SCOPE } from '../models/portal';
+import type { SensorSummary } from '../models/sensor';
 
 const SensorMap = lazy(() => import('../components/SensorMap'));
 
 const DEFAULT_CITIES = ['Kampala', 'Entebbe'];
-const EMPTY_LOCATIONS: SensorLocation[] = [];
+const EMPTY_DEVICES: ScopedDevice[] = [];
 
-export default function DashboardPage() {
+interface DashboardPageProps {
+  scope?: ApiScope;
+  title?: string;
+  subtitle?: string;
+  detailPath?: (deviceId: string) => string;
+  portal?: boolean;
+}
+
+export default function DashboardPage({
+  scope = PUBLIC_SCOPE,
+  title = 'Noise Monitor',
+  subtitle = 'Sunbird public sensor network',
+  detailPath = (deviceId) => `/locations/${encodeURIComponent(deviceId)}`,
+  portal = false,
+}: DashboardPageProps) {
   const [cityFilter, setCityFilter] = useState('All');
   const [exportingCsv, setExportingCsv] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | undefined>();
-  const locationsQueryResult = useQuery(locationsQuery());
-  const locations = locationsQueryResult.data ?? EMPTY_LOCATIONS;
+  const devicesQueryResult = useQuery(scopedDevicesQuery(scope));
+  const devices = devicesQueryResult.data ?? EMPTY_DEVICES;
 
   const cities = useMemo(() => {
-    const unique = new Set([...DEFAULT_CITIES, ...locations.map((location) => location.city).filter(Boolean)]);
+    const unique = new Set([
+      ...DEFAULT_CITIES,
+      ...devices.map((device) => device.location?.city).filter((city): city is string => Boolean(city)),
+    ]);
     return ['All', ...[...unique].sort((a, b) => a.localeCompare(b))];
-  }, [locations]);
+  }, [devices]);
 
-  const filteredLocations = useMemo(
-    () => locations.filter((location) => cityFilter === 'All' || location.city.toLowerCase() === cityFilter.toLowerCase()),
-    [cityFilter, locations],
+  const filteredDevices = useMemo(
+    () =>
+      devices.filter(
+        (device) =>
+          device.location &&
+          (cityFilter === 'All' || device.location.city.toLowerCase() === cityFilter.toLowerCase()),
+      ),
+    [cityFilter, devices],
   );
 
   const liveSensorQueries = useQueries({
-    queries: filteredLocations.map((location) => ({
-      ...liveSensorQuery(location.deviceName),
+    queries: filteredDevices.map((device) => ({
+      ...scopedLiveSensorQuery(scope, device),
       retry: 1,
     })),
   });
 
   const sensors = useMemo<SensorSummary[]>(
     () =>
-      filteredLocations.map((location, index) => {
+      filteredDevices.map((device, index) => {
         const query = liveSensorQueries[index];
         return createSensorSummaryFromLiveData(
-          location,
+          { ...device.location!, detailRoute: detailPath(device.id) },
           query?.data,
           query?.isPending ? 'loading' : query?.isError ? 'error' : 'empty',
         );
       }),
-    [liveSensorQueries, filteredLocations],
+    [detailPath, liveSensorQueries, filteredDevices],
   );
 
   const stats = useMemo(() => buildDashboardStats(sensors), [sensors]);
@@ -81,18 +106,18 @@ export default function DashboardPage() {
     }
   }
 
-  if (locationsQueryResult.isPending) {
+  if (devicesQueryResult.isPending) {
     return <LoadingPanel title="Loading sensor network" body="Fetching locations from the Sunbird noise sensor API." />;
   }
 
-  if (locationsQueryResult.isError) {
+  if (devicesQueryResult.isError) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         <StatusPanel
           title="Unable to load sensor locations"
-          body="The dashboard could not reach the locations endpoint. Check the API base URL and network access, then try again."
+          body="The dashboard could not load the visible device scope. Check the API connection and try again."
           actionLabel="Retry"
-          onAction={() => void locationsQueryResult.refetch()}
+          onAction={() => void devicesQueryResult.refetch()}
         />
       </div>
     );
@@ -102,9 +127,9 @@ export default function DashboardPage() {
     <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
       <section className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard
-          label="Valid locations"
+          label="Mapped devices"
           value={formatInteger(stats.totalSensors)}
-          detail={`${stats.reportingSensors} reporting live metrics`}
+          detail={`${stats.reportingSensors} reporting · ${devices.length} visible total`}
           icon={<MapPin size={18} aria-hidden="true" />}
         />
         <MetricCard
@@ -155,8 +180,8 @@ export default function DashboardPage() {
           <div className="mb-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h1 className="text-xl font-black text-slate-950">Noise Monitor</h1>
-                <p className="mt-1 text-sm text-slate-500">Kampala and Entebbe public sensor network</p>
+                <h1 className="text-xl font-black text-slate-950">{title}</h1>
+                <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
               </div>
               <span className="inline-flex items-center gap-2 rounded-md bg-emerald-100 px-3 py-2 text-sm font-bold text-emerald-700">
                 <Activity size={15} aria-hidden="true" />
@@ -204,7 +229,50 @@ export default function DashboardPage() {
           <SensorList sensors={sensors} />
         </aside>
       </section>
+
+      <UnmappedDeviceList
+        devices={devices.filter((device) => !device.location)}
+        detailPath={detailPath}
+        organizationScoped={portal}
+      />
     </div>
+  );
+}
+
+function UnmappedDeviceList({
+  devices,
+  detailPath,
+  organizationScoped,
+}: {
+  devices: ScopedDevice[];
+  detailPath: (deviceId: string) => string;
+  organizationScoped: boolean;
+}) {
+  if (devices.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="mt-5 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+      <h2 className="text-lg font-extrabold text-slate-950">Devices awaiting a mapped location</h2>
+      <p className="mt-1 text-sm text-slate-600">
+        {organizationScoped
+          ? 'These devices belong to this organization but cannot be placed on the map yet.'
+          : 'These public devices remain available even though they cannot be placed on the map yet.'}
+      </p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {devices.map((device) => (
+          <Link
+            key={device.id}
+            to={detailPath(device.id)}
+            className="rounded-lg border border-slate-200 px-4 py-3 transition hover:border-slate-300 hover:bg-slate-50"
+          >
+            <span className="block truncate font-extrabold text-slate-900">{device.displayName}</span>
+            <span className="mt-1 block text-xs font-bold text-slate-500">{device.deviceId} · {device.sensorType}</span>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -222,8 +290,9 @@ function buildDashboardStats(sensors: SensorSummary[]) {
     reportingSensors: readings.length,
     averageDb: readings.length ? readings.reduce((sum, value) => sum + value, 0) / readings.length : undefined,
     exceedances: sensors.reduce((total, sensor) => total + (sensor.latestMetric?.exceedances ?? 0), 0),
-    sensorMix: Object.entries(typeCounts)
-      .map(([type, count]) => `${count} ${type}`)
-      .join(' / '),
+    sensorMix:
+      Object.entries(typeCounts)
+        .map(([type, count]) => `${count} ${type}`)
+        .join(' / ') || 'No mapped devices',
   };
 }

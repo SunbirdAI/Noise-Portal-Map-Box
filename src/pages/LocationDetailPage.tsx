@@ -9,57 +9,52 @@ import MetricCard from '../components/MetricCard';
 import NoiseAdvisorPanel from '../components/NoiseAdvisorPanel';
 import StatusPanel from '../components/StatusPanel';
 import LocationCharts from '../components/LocationCharts';
-import {
-  liveSensorQuery,
-  locationMetricsQuery,
-  locationsQuery,
-  sensorRangeDataQuery,
-} from '../lib/api/queries';
+import { scopedDeviceQuery, scopedLiveSensorQuery, scopedSensorRangeQuery } from '../lib/api/v2Queries';
+import { scopedDeviceInfo } from '../lib/api/v2';
 import { aggregateDailyPoints, buildHeatmap, metricsToDailyChartPoints, normalizeHourlyTrendData } from '../lib/charts';
 import { buildLocationCsvRows, downloadCsv, locationCsvFilename } from '../lib/csvExport';
 import { createPresetDateRange } from '../lib/dateRanges';
-import { selectDetailNoiseMetrics } from '../lib/detailMetrics';
 import { formatDateTime, formatDb, formatInteger, formatNumber, formatRelative } from '../lib/format';
-import { detectSensorType, getLatestMetric, liveDataToNoiseMetric } from '../lib/sensors';
+import { getLatestMetric, liveDataToNoiseMetric } from '../lib/sensors';
+import type { ApiScope } from '../models/portal';
+import { PUBLIC_SCOPE } from '../models/portal';
 import type { NoiseMetric } from '../models/sensor';
 
-export default function LocationDetailPage() {
-  const { locationId = '' } = useParams();
+interface LocationDetailPageProps {
+  scope?: ApiScope;
+  backPath?: string;
+  backLabel?: string;
+}
+
+export default function LocationDetailPage({
+  scope = PUBLIC_SCOPE,
+  backPath = '/',
+  backLabel = 'Dashboard',
+}: LocationDetailPageProps) {
+  const { deviceId = '' } = useParams();
   const [selectedRange, setSelectedRange] = useState(() => createPresetDateRange('24h'));
   const [exportingCsv, setExportingCsv] = useState(false);
   const [exportMessage, setExportMessage] = useState<string | undefined>();
-  const locationsResult = useQuery(locationsQuery());
-  const locationMetricsResult = useQuery(locationMetricsQuery(locationId));
-  const location = useMemo(
-    () => locationsResult.data?.find((candidate) => candidate.id === locationId),
-    [locationId, locationsResult.data],
-  );
-  const deviceName = location?.deviceName ?? locationMetricsResult.data?.deviceName ?? '';
-  const liveSensorResult = useQuery({
-    ...liveSensorQuery(deviceName),
-    enabled: Boolean(deviceName),
-  });
-  const rangeMetricsResult = useQuery({
-    ...sensorRangeDataQuery(deviceName, selectedRange),
-    enabled: Boolean(deviceName),
-  });
+  const deviceResult = useQuery(scopedDeviceQuery(scope, deviceId));
+  const scopedDevice = deviceResult.data;
+  const location = scopedDevice?.location;
+  const deviceName = scopedDevice?.deviceId ?? '';
+  const liveSensorResult = useQuery(scopedLiveSensorQuery(scope, scopedDevice));
+  const rangeMetricsResult = useQuery(scopedSensorRangeQuery(scope, scopedDevice, selectedRange));
   const liveData = liveSensorResult.data;
-  const device = liveData?.device;
-  const inferredType = liveData?.type ?? detectSensorType({ deviceName });
+  const device = liveData?.device ?? (scopedDevice ? scopedDeviceInfo(scopedDevice) : undefined);
+  const inferredType = liveData?.type ?? scopedDevice?.sensorType ?? 'Unknown';
   const isAiSensor = inferredType === 'AI';
+  const isPartnerScope = scope.kind === 'organization';
   const liveMetric = useMemo(() => liveDataToNoiseMetric(liveData), [liveData]);
-
-  const fallbackMetrics = useMemo<NoiseMetric[]>(() => {
-    return selectDetailNoiseMetrics(locationMetricsResult.data?.hourly, liveData);
-  }, [liveData, locationMetricsResult.data?.hourly]);
 
   const availableMetrics = useMemo<NoiseMetric[]>(() => {
     if (rangeMetricsResult.isSuccess) {
       return rangeMetricsResult.data.hourlyMetrics;
     }
 
-    return fallbackMetrics;
-  }, [fallbackMetrics, rangeMetricsResult.data?.hourlyMetrics, rangeMetricsResult.isSuccess]);
+    return liveMetric ? [liveMetric] : [];
+  }, [liveMetric, rangeMetricsResult.data?.hourlyMetrics, rangeMetricsResult.isSuccess]);
 
   const latestMetric = useMemo(
     () => getLatestMetric(availableMetrics) ?? (rangeMetricsResult.isSuccess ? undefined : liveMetric),
@@ -74,9 +69,8 @@ export default function LocationDetailPage() {
       return daily.length > 0 ? metricsToDailyChartPoints(daily) : aggregateDailyPoints(availableMetrics);
     }
 
-    const daily = locationMetricsResult.data?.daily ?? [];
-    return daily.length > 0 ? metricsToDailyChartPoints(daily) : aggregateDailyPoints(availableMetrics);
-  }, [availableMetrics, locationMetricsResult.data?.daily, rangeMetricsResult.data?.dailyMetrics, rangeMetricsResult.isSuccess]);
+    return aggregateDailyPoints(availableMetrics);
+  }, [availableMetrics, rangeMetricsResult.data?.dailyMetrics, rangeMetricsResult.isSuccess]);
   const heatmap = useMemo(() => buildHeatmap(availableMetrics), [availableMetrics]);
   const exportDisabled = exportingCsv || rangeMetricsResult.isFetching || rangeMetricsResult.isError;
 
@@ -109,32 +103,18 @@ export default function LocationDetailPage() {
     }
   }
 
-  if (locationsResult.isPending && locationMetricsResult.isPending) {
-    return <LoadingPanel title="Loading location details" body="Reconstructing this sensor from the direct route and live API data." />;
+  if (deviceResult.isPending) {
+    return <LoadingPanel title="Loading device details" body="Fetching this device from the visible API scope." />;
   }
 
-  if (!location && locationsResult.isSuccess && locationMetricsResult.isSuccess && !locationMetricsResult.data.deviceName) {
+  if (deviceResult.isError || !scopedDevice) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
         <StatusPanel
-          title="Location not found"
-          body="No location with this ID was returned by the backend. It may have been removed or the URL may be incorrect."
-        />
-      </div>
-    );
-  }
-
-  if (locationsResult.isError && locationMetricsResult.isError) {
-    return (
-      <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
-        <StatusPanel
-          title="Unable to load this location"
-          body="Both the location list and location metrics requests failed. Check the API base URL and try again."
+          title="Device unavailable"
+          body="This device was not found in the current public or organization scope. It may have been removed, reassigned, or the URL may be incorrect."
           actionLabel="Retry"
-          onAction={() => {
-            void locationsResult.refetch();
-            void locationMetricsResult.refetch();
-          }}
+          onAction={() => void deviceResult.refetch()}
         />
       </div>
     );
@@ -144,11 +124,11 @@ export default function LocationDetailPage() {
     <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <Link
-          to="/"
+          to={backPath}
           className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:border-slate-300 hover:bg-slate-100"
         >
           <ArrowLeft size={16} aria-hidden="true" />
-          Dashboard
+          {backLabel}
         </Link>
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone={isAiSensor ? 'blue' : inferredType === 'MCU' ? 'green' : 'neutral'}>{inferredType}</Badge>
@@ -156,7 +136,7 @@ export default function LocationDetailPage() {
         </div>
       </div>
 
-      {locationsResult.isError || locationMetricsResult.isError || liveSensorResult.isError || rangeMetricsResult.isError ? (
+      {liveSensorResult.isError || rangeMetricsResult.isError ? (
         <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
           Some location detail requests failed. The page is showing all data that could be loaded from the backend.
         </div>
@@ -179,7 +159,7 @@ export default function LocationDetailPage() {
           <div className="min-w-0">
             <p className="text-sm font-extrabold uppercase tracking-[0.08em] text-slate-500">{location?.city ?? 'Location'}</p>
             <h1 className="mt-1 text-3xl font-black tracking-normal text-slate-950">
-              {(location?.village ?? location?.parish ?? device?.displayName ?? deviceName) || 'Unknown sensor'}
+              {(location?.village ?? location?.parish ?? scopedDevice.displayName ?? deviceName) || 'Unknown sensor'}
             </h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
               {location?.description ?? 'Location metadata is unavailable from the current backend response.'}
@@ -189,15 +169,26 @@ export default function LocationDetailPage() {
               <Metadata label="Division" value={location?.division ?? 'No data'} />
               <Metadata label="Parish" value={location?.parish ?? 'No data'} />
               <Metadata label="Coordinates" value={location ? `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}` : 'No data'} />
+              {isPartnerScope ? (
+                <>
+                  <Metadata label="Organization" value={scopedDevice.organization?.name ?? 'No data'} />
+                  <Metadata label="Visibility" value={scopedDevice.visibility ?? 'No data'} />
+                </>
+              ) : null}
             </dl>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <h2 className="text-sm font-extrabold uppercase tracking-[0.08em] text-slate-500">Limits and Health</h2>
+            <h2 className="text-sm font-extrabold uppercase tracking-[0.08em] text-slate-500">
+              {isPartnerScope ? 'Limits and health' : 'Limits and latest reading'}
+            </h2>
             <dl className="mt-4 grid gap-3 text-sm">
               <Metadata label="Day limit" value={formatDb(location?.dayLimit)} />
               <Metadata label="Night limit" value={formatDb(location?.nightLimit)} />
-              <Metadata label="Last seen" value={formatDateTime(device?.lastSeen ?? healthMetric?.uploadedAt)} />
-              <Metadata label="Updated" value={formatRelative(device?.lastSeen ?? healthMetric?.uploadedAt)} />
+              {isPartnerScope ? <Metadata label="Last seen" value={formatDateTime(device?.lastSeen)} /> : null}
+              <Metadata
+                label="Updated"
+                value={formatRelative(isPartnerScope ? device?.lastSeen ?? healthMetric?.uploadedAt : healthMetric?.uploadedAt)}
+              />
             </dl>
           </div>
         </div>
@@ -259,7 +250,7 @@ export default function LocationDetailPage() {
         />
       </section>
 
-      <NoiseAdvisorPanel deviceName={deviceName} />
+      <NoiseAdvisorPanel deviceId={deviceId} scope={scope} />
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Suspense fallback={<LoadingPanel title="Loading charts" />}>
@@ -267,20 +258,22 @@ export default function LocationDetailPage() {
         </Suspense>
 
         <aside className="grid content-start gap-5">
-          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="flex items-center gap-2 text-lg font-extrabold text-slate-950">
-              <Battery size={18} aria-hidden="true" />
-              Device Health
-            </h2>
-            <dl className="mt-4 grid gap-3 text-sm">
-              <Metadata label="Battery" value={formatNumber(healthMetric?.batteryVoltage, 'V')} />
-              <Metadata label="Panel voltage" value={formatNumber(healthMetric?.panelVoltage, 'V')} />
-              <Metadata label="Signal strength" value={formatNumber(healthMetric?.signalStrength)} />
-              <Metadata label="Data balance" value={formatNumber(healthMetric?.dataBalance)} />
-              <Metadata label="Firmware" value={device?.versionNumber ?? 'No data'} />
-              <Metadata label="Stage" value={device?.productionStage ?? 'No data'} />
-            </dl>
-          </section>
+          {isPartnerScope ? (
+            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <h2 className="flex items-center gap-2 text-lg font-extrabold text-slate-950">
+                <Battery size={18} aria-hidden="true" />
+                Device Health
+              </h2>
+              <dl className="mt-4 grid gap-3 text-sm">
+                <Metadata label="Battery" value={formatNumber(healthMetric?.batteryVoltage, 'V')} />
+                <Metadata label="Panel voltage" value={formatNumber(healthMetric?.panelVoltage, 'V')} />
+                <Metadata label="Signal strength" value={formatNumber(healthMetric?.signalStrength)} />
+                <Metadata label="Data balance" value={formatNumber(healthMetric?.dataBalance)} />
+                <Metadata label="Firmware" value={device?.versionNumber ?? 'No data'} />
+                <Metadata label="Stage" value={device?.productionStage ?? 'No data'} />
+              </dl>
+            </section>
+          ) : null}
 
           <AiPanels
             enabled={isAiSensor}
@@ -290,6 +283,7 @@ export default function LocationDetailPage() {
             envError={liveSensorResult.isError}
             inference={liveData?.inference}
             environmental={liveData?.environment}
+            partner={isPartnerScope}
           />
         </aside>
       </section>
@@ -314,12 +308,14 @@ function AiPanels({
   envError,
   inference,
   environmental,
+  partner,
 }: {
   enabled: boolean;
   aiLoading: boolean;
   envLoading: boolean;
   aiError: boolean;
   envError: boolean;
+  partner: boolean;
   inference?: { className?: string; probability?: number; audioName?: string; createdAt?: string };
   environmental?: {
     temperature?: number;
@@ -359,7 +355,7 @@ function AiPanels({
             <dl className="mt-4 grid gap-3 text-sm">
               <Metadata label="Class" value={inference.className ?? 'No data'} />
               <Metadata label="Probability" value={formatNumber(inference.probability === undefined ? undefined : inference.probability * 100, '%')} />
-              <Metadata label="Audio sample" value={inference.audioName ?? 'No data'} />
+              {partner ? <Metadata label="Audio sample" value={inference.audioName ?? 'No data'} /> : null}
               <Metadata label="Created" value={formatDateTime(inference.createdAt)} />
             </dl>
           ) : (
@@ -382,8 +378,12 @@ function AiPanels({
               <Metadata label="Humidity" value={formatNumber(environmental.humidity, '%')} />
               <Metadata label="Pressure" value={formatNumber(environmental.pressure)} />
               <Metadata label="Air quality" value={formatNumber(environmental.airQuality)} />
-              <Metadata label="System temperature" value={formatNumber(environmental.systemTemperature, 'C')} />
-              <Metadata label="Power usage" value={formatNumber(environmental.powerUsage, 'W')} />
+              {partner ? (
+                <>
+                  <Metadata label="System temperature" value={formatNumber(environmental.systemTemperature, 'C')} />
+                  <Metadata label="Power usage" value={formatNumber(environmental.powerUsage, 'W')} />
+                </>
+              ) : null}
               <Metadata label="Noise reading" value={formatDb(environmental.dbLevel)} />
               <Metadata label="Created" value={formatDateTime(environmental.createdAt)} />
             </dl>

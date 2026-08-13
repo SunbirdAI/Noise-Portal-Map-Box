@@ -3,30 +3,31 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import DashboardPage from './DashboardPage';
 import { renderWithProviders } from '../test/render';
-import { fetchAllLocations, fetchDeviceByName } from '../lib/api/client';
+import { fetchScopedDevices } from '../lib/api/v2';
+import { fetchScopedSensorLiveData } from '../lib/v2SensorData';
 
-vi.mock('../lib/api/client', () => ({
-  fetchAllLocations: vi.fn(),
-  fetchDeviceByName: vi.fn(),
-  fetchLocationMetrics: vi.fn(),
-  fetchAiInference: vi.fn(),
-  fetchEnvironmentalReading: vi.fn(),
-}));
+vi.mock('../lib/api/v2', async () => {
+  const actual = await vi.importActual<typeof import('../lib/api/v2')>('../lib/api/v2');
+  return { ...actual, fetchScopedDevices: vi.fn() };
+});
+
+vi.mock('../lib/v2SensorData', async () => {
+  const actual = await vi.importActual<typeof import('../lib/v2SensorData')>('../lib/v2SensorData');
+  return { ...actual, fetchScopedSensorLiveData: vi.fn() };
+});
 
 // SensorMap creates a real mapbox-gl Map, which needs a WebGL context jsdom
 // doesn't provide. Stub it so tests can render the loaded dashboard state.
-vi.mock('../components/SensorMap', () => ({
-  default: () => null,
-}));
+vi.mock('../components/SensorMap', () => ({ default: () => null }));
 
 describe('DashboardPage', () => {
   beforeEach(() => {
-    vi.mocked(fetchAllLocations).mockReset();
-    vi.mocked(fetchDeviceByName).mockReset();
+    vi.mocked(fetchScopedDevices).mockReset();
+    vi.mocked(fetchScopedSensorLiveData).mockReset();
   });
 
   it('shows the dashboard loading state', () => {
-    vi.mocked(fetchAllLocations).mockReturnValue(new Promise(() => undefined));
+    vi.mocked(fetchScopedDevices).mockReturnValue(new Promise(() => undefined));
 
     renderWithProviders(<DashboardPage />);
 
@@ -34,7 +35,7 @@ describe('DashboardPage', () => {
   });
 
   it('shows an API failure state', async () => {
-    vi.mocked(fetchAllLocations).mockRejectedValue(new Error('network down'));
+    vi.mocked(fetchScopedDevices).mockRejectedValue(new Error('network down'));
 
     renderWithProviders(<DashboardPage />);
 
@@ -43,29 +44,47 @@ describe('DashboardPage', () => {
   });
 
   it('exposes accessible pressed state on city filter buttons', async () => {
-    vi.mocked(fetchAllLocations).mockResolvedValue([
+    vi.mocked(fetchScopedDevices).mockResolvedValue([
       {
-        id: 'loc-1',
-        latitude: 0.3136,
-        longitude: 32.5811,
-        coordinateSource: 'fixed',
-        city: 'Kampala',
-        deviceName: 'SB1',
+        id: 'device-1',
+        deviceId: 'SB1',
+        displayName: 'Kampala sensor',
+        sensorType: 'MCU',
+        location: {
+          id: 'device-1',
+          locationId: 'loc-1',
+          deviceUuid: 'device-1',
+          latitude: 0.3136,
+          longitude: 32.5811,
+          coordinateSource: 'fixed',
+          city: 'Kampala',
+          deviceName: 'SB1',
+        },
       },
       {
-        id: 'loc-2',
-        latitude: 0.0512,
-        longitude: 32.4637,
-        coordinateSource: 'fixed',
-        city: 'Entebbe',
-        deviceName: 'SB2',
+        id: 'device-2',
+        deviceId: 'SB2',
+        displayName: 'Entebbe sensor',
+        sensorType: 'MCU',
+        location: {
+          id: 'device-2',
+          locationId: 'loc-2',
+          deviceUuid: 'device-2',
+          latitude: 0.0512,
+          longitude: 32.4637,
+          coordinateSource: 'fixed',
+          city: 'Entebbe',
+          deviceName: 'SB2',
+        },
       },
     ]);
-    vi.mocked(fetchDeviceByName).mockResolvedValue({
-      deviceId: 'SB1',
-      sensorType: 'MCU',
-      metrics: [],
-    });
+    vi.mocked(fetchScopedSensorLiveData).mockImplementation(async (_scope, device) => ({
+      type: device.sensorType,
+      deviceName: device.deviceId,
+      latestNoise: null,
+      lastUpdated: null,
+      battery: null,
+    }));
 
     const user = userEvent.setup();
     renderWithProviders(<DashboardPage />);

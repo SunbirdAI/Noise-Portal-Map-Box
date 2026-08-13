@@ -1,4 +1,4 @@
-name: Deploy to GitHub Pages
+name: Deploy public-only frontend to GitHub Pages
 
 on:
   push:
@@ -20,7 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VITE_BASE_PATH: /
-      VITE_API_BASE_URL: https://noise-sensors-dashboard.herokuapp.com
+      # GitHub Pages cannot proxy session/CSRF traffic. This deployment is
+      # intentionally anonymous/public-only.
+      VITE_API_ORIGIN: https://noise-sensors-dashboard.herokuapp.com
+      VITE_PARTNER_PORTAL_ENABLED: false
       VITE_MAPBOX_ACCESS_TOKEN: ${{ secrets.VITE_MAPBOX_ACCESS_TOKEN }}
     steps:
       - name: Checkout

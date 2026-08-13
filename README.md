@@ -1,143 +1,187 @@
 # Sunbird AI Noise Dashboard
 
-Modern public frontend for monitoring environmental noise sensors across Kampala and Entebbe. The app is a static React/Vite dashboard that uses the existing Sunbird noise backend and renders an interactive Mapbox GL map with clustered, color-coded sensor markers.
+React frontend for two deliberately separate experiences:
+
+- an anonymous, read-only dashboard containing only `PUBLIC` devices and public serializer fields;
+- a Django-session-authenticated partner portal containing only organizations from the signed-in user's active memberships.
+
+Sunbird's platform administration remains in the internal Django dashboard. Organization creation, device assignment, visibility changes, and cross-organization administration are intentionally not React features.
 
 ## Stack
 
-- React + Vite + TypeScript
-- Mapbox GL JS for the main clustered map
-- TanStack Query for API fetching, caching, retries, and partial failure handling
-- React Router for dashboard/detail/404 routes
-- Tailwind CSS for the responsive UI
-- Recharts for detail-page charts
-- Vitest + React Testing Library for tests
+- React 18, TypeScript, Vite, React Router and TanStack Query
+- Mapbox GL JS, Tailwind CSS and Recharts
+- Vitest and React Testing Library
 
-## Setup
+## Local development
 
-Install dependencies:
+Install dependencies and create the local environment file:
 
 ```bash
 npm install
-```
-
-Create a local environment file:
-
-```bash
 cp .env.example .env.local
 ```
 
-Set the environment values:
+For a local Django backend on port 8000:
 
-```bash
-VITE_API_BASE_URL=/api
-VITE_MAPBOX_ACCESS_TOKEN=your_mapbox_public_token
+```dotenv
+VITE_API_ORIGIN=
+VITE_PARTNER_PORTAL_ENABLED=true
+VITE_API_PROXY_TARGET=http://127.0.0.1:8000
+VITE_MAPBOX_ACCESS_TOKEN=your_public_mapbox_token
 ```
 
-Run the development server:
+Then run:
 
 ```bash
 npm run dev
 ```
 
-Build for production:
+The browser calls exact relative paths such as `/api/v2/auth/me/`. Vite proxies `/api/...` to Django without removing the `/api` prefix. `VITE_API_PROXY_TARGET` is development-only and is not embedded in a production bundle.
 
-```bash
-npm run build
+## Environment variables
+
+### Frontend build variables
+
+| Variable | Required | Meaning |
+| --- | --- | --- |
+| `VITE_API_ORIGIN` | Yes; normally empty | Empty means same-origin `/api/v2/...`. A complete backend origin is allowed only for public-only development/diagnostics. Do not set `/api`; API functions already use exact `/api/v2/...` paths. |
+| `VITE_PARTNER_PORTAL_ENABLED` | Yes | `true` for a same-origin deployment; `false` for static public-only builds. A direct `VITE_API_ORIGIN` always disables partner auth. |
+| `VITE_MAPBOX_ACCESS_TOKEN` | Recommended | Public browser token used by Mapbox GL. The dashboard provides a configuration state when absent. |
+| `VITE_PASSWORD_RESET_URL` | Optional | Existing password-reset page. “Forgot password?” is hidden when this is empty. |
+| `VITE_INTERNAL_DASHBOARD_URL` | Optional | Link shown to a platform-only account. It must point to the server-rendered Sunbird internal dashboard, not a React admin page. |
+| `VITE_SHOW_API_ORIGIN` | Optional | Development-only diagnostic host label. It has no effect in a production build. |
+| `VITE_BASE_PATH` | Optional | Vite application base, normally `/` for `noise.sunbird.ai`. |
+
+### Development server variable
+
+`VITE_API_PROXY_TARGET` is the Django origin used by the Vite proxy. It defaults to the existing hosted backend if omitted; use `http://127.0.0.1:8000` for full-stack local work.
+
+### Cloudflare runtime variable
+
+`BACKEND_ORIGIN` is read by the Cloudflare Pages Function at runtime and must be a complete origin. Production value:
+
+```dotenv
+BACKEND_ORIGIN=https://noise-sensors-dashboard.herokuapp.com
 ```
 
-Run tests:
+It is server-side proxy configuration, not a `VITE_` variable and not a secret credential.
+
+## API and security model
+
+All active screens use API v2:
+
+- public: `/api/v2/public/...`;
+- authentication: `/api/v2/auth/...`;
+- partner data: `/api/v2/portal/organizations/<organization_uuid>/...`.
+
+Every request uses `credentials: "include"`. Mutating requests initialize `/api/v2/auth/csrf/`, read the host-owned `csrftoken` cookie, and send `X-CSRFToken`. The Django `sessionid` remains an HttpOnly cookie. Passwords, sessions, CSRF values and invitation tokens are never written to `localStorage` or `sessionStorage`.
+
+Frontend membership checks prevent out-of-scope organization queries and improve the user experience, but they are not an authorization boundary. Django must continue returning 404 for out-of-scope resources and enforcing every permission.
+
+Public detail pages do not render organization, visibility, firmware, production stage, device-health fields, system health, power usage or internal inference audio names. Partner detail pages render those fields only when the portal serializer returns them; unavailable values are not fabricated.
+
+## Production hosting decision: Cloudflare Pages
+
+Cloudflare Pages is the production-capable host for the partner portal. Build the site with:
+
+```dotenv
+VITE_API_ORIGIN=
+VITE_PARTNER_PORTAL_ENABLED=true
+VITE_BASE_PATH=/
+VITE_MAPBOX_ACCESS_TOKEN=...
+VITE_PASSWORD_RESET_URL=https://noise-sensors-dashboard.herokuapp.com/accounts/password_reset/
+VITE_INTERNAL_DASHBOARD_URL=https://noise-sensors-dashboard.herokuapp.com/
+```
+
+Use `npm run build` with output directory `dist`. The repository includes:
+
+- `functions/api/[[path]].js`: same-origin edge proxy;
+- `public/_routes.json`: invokes the Function only for `/api/*`;
+- `public/_redirects`: SPA fallback to `index.html` for direct route refreshes.
+
+The proxy rewrite is exact:
+
+```text
+https://noise.sunbird.ai/api/v2/auth/login/?next=x
+  -> https://noise-sensors-dashboard.herokuapp.com/api/v2/auth/login/?next=x
+```
+
+It preserves the method, request body, query string, `Cookie`, `Origin`, `X-CSRFToken` and other request headers. It forwards the response body/status and all `Set-Cookie` values, removing an upstream `Domain` attribute so cookies belong to `noise.sunbird.ai`. API responses receive `Cache-Control: private, no-store` and `Pragma: no-cache`; authentication and portal data must not be cached.
+
+Production Django must include `https://noise.sunbird.ai` in `CSRF_TRUSTED_ORIGINS`. Secure cookie settings and allowed hosts must also include the actual production topology. CORS alone is not a solution: the browser must see authentication and API traffic on the frontend origin.
+
+### GitHub Pages limitation
+
+The existing GitHub Pages workflow builds with a direct Heroku `VITE_API_ORIGIN` and `VITE_PARTNER_PORTAL_ENABLED=false`. It is explicitly public-only and hides login/invitation entry points. GitHub Pages cannot run this same-origin session proxy, so partner login must remain disabled there unless an independent edge proxy is placed in front of the custom domain. Do not point the Cloudflare and GitHub Pages deployments at the same production hostname simultaneously.
+
+## Authentication behavior
+
+Authentication restoration has four states: loading, authenticated, confirmed anonymous, and service unavailable. A 401/403 from `/me/` confirms anonymous; network/proxy/5xx errors do not. Public pages remain usable during an auth outage and show a quiet warning. Protected routes show “Authentication service unavailable” instead of redirecting repeatedly.
+
+A portal 401/403 triggers `/me/` revalidation. If Django confirms expiry, organization query caches are removed and the user is redirected to login with the intended destination preserved. Resource 404 responses do not trigger session-expiry behavior. Logout also removes organization caches.
+
+## Partner memberships and user management
+
+- One active membership redirects directly to that organization.
+- Multiple active memberships render an organization selector.
+- No active memberships render a clear empty state.
+- Route organization UUIDs are checked against active memberships before device, member or invitation queries start.
+- `is_platform_administrator` never bypasses partner membership checks. Platform-only accounts use the optional internal-dashboard link.
+- Only `PARTNER_ADMIN` memberships render user management.
+- Self-deactivation and deactivation of the last active partner administrator are disabled and explained.
+- Member deactivation and invitation revocation require confirmation; duplicate mutation submissions are disabled.
+- Backend 400/409 validation details are displayed. A 503 during invitation creation explains that the invitation may have been saved and refreshes the list.
+
+The self-deactivation and final-administrator rules are currently frontend safeguards only. The backend must independently enforce both before this protection is security-complete.
+
+## Invitations and password reset
+
+`/accept-invitation/:token` handles new accounts, signed-in existing accounts, and PENDING/ACCEPTED/REVOKED/EXPIRED states. New accounts confirm their password and receive strong-password guidance; Django remains the validator. A successful acceptance redirects to the accepted organization. Signing in first preserves the invitation URL as the destination.
+
+The backend invitation email URL must target:
+
+```text
+https://noise.sunbird.ai/accept-invitation/<token>
+```
+
+Do not attach invitation tokens to analytics or error-reporting payloads. This frontend currently has no analytics/error-reporting integration.
+
+There are no versioned JSON password-reset endpoints in the reviewed backend contract. `VITE_PASSWORD_RESET_URL` provides a safe entry point to the existing server-rendered `/accounts/password_reset/` page. That direct backend page owns its own CSRF flow. A fully integrated React reset request/confirmation flow remains blocked on versioned backend endpoints; unrestricted signup is not provided.
+
+## Request scaling
+
+Public and organization query keys are separate. TanStack Query deduplicates identical active requests, live polling does not continue in a background tab, and current-reading requests are limited to eight concurrent requests. The backend should eventually add a scoped dashboard/current-readings batch endpoint for large fleets; the frontend does not invent one.
+
+## Production browser verification checklist
+
+Run this checklist against the deployed frontend hostname before enabling partner login:
+
+1. Open DevTools on `https://noise.sunbird.ai/login` with storage cleared.
+2. Confirm `GET /api/v2/auth/csrf/` is sent to `noise.sunbird.ai`, returns success, is `no-store`, and creates `csrftoken` for the frontend host.
+3. Submit valid credentials and confirm `POST /api/v2/auth/login/` includes `Cookie: csrftoken=...` and `X-CSRFToken` with the matching value.
+4. Confirm login creates a usable frontend-host `sessionid` cookie and no credential/session/token appears in local or session storage.
+5. Refresh a partner route and confirm `GET /api/v2/auth/me/` restores the session without another login.
+6. Directly refresh `/login`, `/portal/organizations/<member-org>`, and `/accept-invitation/<test-token>`; each must load the React application rather than a host 404.
+7. Enter another organization's UUID. Confirm the frontend starts no organization data requests and displays access unavailable. Confirm a direct backend attempt still returns 404.
+8. Sign out. Confirm `POST /api/v2/auth/logout/` carries CSRF, clears/invalidates `sessionid`, `/me/` then confirms anonymous, and private data is absent from the query cache.
+9. Simulate a backend 5xx and verify public pages remain usable while protected routes show the service-unavailable state.
+
+## Verification commands
 
 ```bash
+npm run lint
 npm test
+npx tsc --noEmit -p tsconfig.app.json
+npm run build
+npm audit --omit=dev
 ```
 
-## Environment Variables
+## Remaining backend/deployment dependencies
 
-`VITE_API_BASE_URL`
-
-Backend API base URL. Defaults to `https://noise-sensors-dashboard.herokuapp.com` when unset.
-
-For local development, use `VITE_API_BASE_URL=/api`. Vite proxies `/api/*` to `https://noise-sensors-dashboard.herokuapp.com/*`, which avoids browser CORS blocking while keeping frontend code pointed at a configurable API base.
-
-`VITE_MAPBOX_ACCESS_TOKEN`
-
-Public Mapbox token used by Mapbox GL JS. The token is read only from the environment and is not hardcoded in source. If it is missing, the app keeps the dashboard usable and shows a clear map configuration state.
-
-## Backend API
-
-The frontend uses the existing backend endpoints:
-
-- `GET /devices/locations/?page=1`
-- `GET /devices/location_metrics/:locationId/`
-- `GET /analysis`
-- `GET /devices/devices/by-device-id/:deviceName/`
-- `GET /device_metrics/sound-inference-data/by-device-id/:deviceName/`
-- `GET /device_metrics/environmental-parameters/by-device-id/:deviceName/`
-- `GET /device_metrics/device/by-device-id/:deviceName/history/`
-- `GET /device_metrics/device/by-device-id/:deviceName/aggregates/`
-- `GET /device_metrics/environmental-parameters/by-device-id/:deviceName/history/`
-- `GET /device_metrics/sound-inference-data/by-device-id/:deviceName/history/`
-
-The client centralizes request handling in `src/lib/api/client.ts`. Dynamic URL values are encoded, location pagination is followed through `next`, and backend responses are normalized into typed frontend models in `src/lib/api/normalizers.ts`.
-
-Device detail date ranges use backend-supported `start_date`, `end_date`, `page`, and `page_size` parameters. Generic MCU/mobile-style devices use the aggregate endpoint for hourly and daily chart buckets with `timezone=Africa/Kampala`. SEAS AI sensors keep their latest live endpoints for popups and latest telemetry, while the detail page uses the environmental and sound-inference history endpoints for selected-range data. The app does not send unsupported range aliases such as `days`, `from`, or `to`.
-
-SEAS environmental history can be very dense, so the frontend requests the latest stable page of readings for the selected range and shows a notice when the backend reports more records than were loaded. A future AI aggregate endpoint would allow complete long-range SEAS charts without loading thousands of raw readings.
-
-## CORS
-
-The Heroku API does not currently return `Access-Control-Allow-Origin` for browser requests from `localhost`, so direct frontend calls to `https://noise-sensors-dashboard.herokuapp.com` are blocked by CORS.
-
-Local development uses the Vite proxy:
-
-```bash
-VITE_API_BASE_URL=/api
-```
-
-For production, choose one of these:
-
-- Enable CORS on the backend for the deployed frontend origin.
-- Deploy a same-origin reverse proxy or edge/serverless function at `/api` and build with `VITE_API_BASE_URL=/api`.
-- If the backend later returns the correct CORS headers, build with `VITE_API_BASE_URL=https://noise-sensors-dashboard.herokuapp.com`.
-
-A static frontend cannot bypass CORS by itself; either the backend or a same-origin proxy must provide the browser-readable response.
-
-## Dashboard Behavior
-
-- Filters invalid GPS coordinates, including `0,0` and out-of-range latitude/longitude.
-- Prefers mobile coordinates when the backend supplies valid mobile coordinate fields.
-- Fetches device metrics per sensor without failing the whole dashboard if one device request fails.
-- Uses real backend values only; missing values are shown as `No data`.
-- Detects sensor type as `MCU`, `MOBILE`, `AI`, or `Unknown` from device metadata and naming conventions.
-- Supports direct refresh on `/locations/:locationId` by fetching data from the route param instead of relying on router state.
-
-## Deployment
-
-This is a static frontend. Any static host that supports SPA fallback routing can serve the `dist` directory generated by `npm run build`.
-
-### GitHub Pages
-
-The repo now includes a GitHub Actions workflow at [.github/workflows/deploy.yml](.github/workflows/deploy.yml) that builds and deploys the app from `main`.
-
-Before enabling it in GitHub, set these repository settings:
-
-- Turn on Pages deployment from GitHub Actions in the repository settings.
-- Add `VITE_MAPBOX_ACCESS_TOKEN` as a repository secret.
-
-The app is configured for the custom domain root `https://noise.sunbird.ai/`, with `VITE_BASE_PATH=/` and [public/CNAME](public/CNAME). If you move back to a repository project URL, update the base path in [vite.config.ts](vite.config.ts), [.github/workflows/deploy.yml](.github/workflows/deploy.yml), and the redirect script in [public/404.html](public/404.html).
-
-For production hosting, configure:
-
-- Static asset root: `dist`
-- SPA fallback: route unknown paths to `dist/index.html`
-- Environment variables at build time: `VITE_API_BASE_URL`, `VITE_MAPBOX_ACCESS_TOKEN`
-- If the backend CORS policy is unchanged, deploy a same-origin `/api` proxy and set `VITE_API_BASE_URL=/api`.
-
-## Key Improvements
-
-- Cleaner typed API layer with pagination, timeouts, normalization, and partial failure handling.
-- Mapbox GL clustered map with dB labels, color-coded noise bands, and detail popups.
-- Direct-load location detail pages with metric cards, daily/hourly charts, heatmap, and AI/environmental panels.
-- Responsive dashboard layout with real loading, empty, error, and missing-configuration states.
-- Lazy-loaded map and route chunks to keep the initial app bundle focused.
-- Test coverage for normalization, sensor type detection, coordinate validation, dashboard states, and direct detail routing.
+- Enforce self-deactivation and final-active-`PARTNER_ADMIN` guards in Django.
+- Add versioned JSON password-reset request and confirmation endpoints for a native React flow.
+- Coordinate the production invitation URL and frontend host in email settings.
+- Configure Django trusted CSRF origins, allowed hosts and secure cookies for `noise.sunbird.ai` behind the proxy.
+- Add a membership-scoped dashboard/current-readings batch endpoint for large fleets.
+- Complete the production browser checklist before enabling partner login.

@@ -47,7 +47,7 @@ describe('NoiseAdvisorPanel', () => {
     const user = userEvent.setup();
     fetchMock.mockResolvedValue(jsonResponse(advisorPayload()));
 
-    renderWithProviders(<NoiseAdvisorPanel deviceName="SB1003" />);
+    renderWithProviders(<NoiseAdvisorPanel deviceId="device-uuid" />);
 
     expect(screen.getByRole('heading', { name: /Noise Advisor/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Explain this location noise data' })).toBeInTheDocument();
@@ -64,7 +64,7 @@ describe('NoiseAdvisorPanel', () => {
     const user = userEvent.setup();
     fetchMock.mockResolvedValue(jsonResponse(advisorPayload({ insight: null, status: 'empty' })));
 
-    renderWithProviders(<NoiseAdvisorPanel deviceName="SB1003" />);
+    renderWithProviders(<NoiseAdvisorPanel deviceId="device-uuid" />);
 
     await user.click(screen.getByRole('button', { name: 'Explain this location noise data' }));
 
@@ -75,7 +75,7 @@ describe('NoiseAdvisorPanel', () => {
     const user = userEvent.setup();
     fetchMock.mockResolvedValue(jsonResponse(advisorPayload({ insight: null, status: 'unavailable' })));
 
-    renderWithProviders(<NoiseAdvisorPanel deviceName="SB1003" />);
+    renderWithProviders(<NoiseAdvisorPanel deviceId="device-uuid" />);
 
     await user.click(screen.getByRole('button', { name: 'Explain this location noise data' }));
 
@@ -89,7 +89,7 @@ describe('NoiseAdvisorPanel', () => {
       .mockResolvedValueOnce(jsonResponse(advisorPayload({ insight: null, status: 'generating' })))
       .mockResolvedValueOnce(jsonResponse(advisorPayload({ insight: 'The summary is ready after a short wait.', status: 'ready' })));
 
-    renderWithProviders(<NoiseAdvisorPanel deviceName="SB1003" />);
+    renderWithProviders(<NoiseAdvisorPanel deviceId="device-uuid" />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Explain this location noise data' }));
 
@@ -123,7 +123,7 @@ describe('NoiseAdvisorPanel', () => {
         ),
       );
 
-    renderWithProviders(<NoiseAdvisorPanel deviceName="SB1003" />);
+    renderWithProviders(<NoiseAdvisorPanel deviceId="device-uuid" />);
 
     await user.click(screen.getByRole('button', { name: 'Explain this location noise data' }));
     expect(await screen.findByText(/Noise is moderate today/i)).toBeInTheDocument();
