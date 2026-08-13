@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 describe('GitHub Pages deployment configuration', () => {
@@ -10,5 +10,34 @@ describe('GitHub Pages deployment configuration', () => {
     );
     expect(workflow).toContain('VITE_PARTNER_PORTAL_ENABLED: false');
     expect(workflow).not.toContain('VITE_API_ORIGIN: /api');
+  });
+});
+
+describe('Vercel partner deployment configuration', () => {
+  it('routes only API v2 through the proxy before the SPA fallback', () => {
+    const configuration = JSON.parse(readFileSync('vercel.json', 'utf8')) as {
+      framework: string;
+      outputDirectory: string;
+      rewrites: Array<{ source: string; destination: string }>;
+    };
+
+    expect(configuration.framework).toBe('vite');
+    expect(configuration.outputDirectory).toBe('dist');
+    expect(configuration.rewrites).toEqual([
+      {
+        source: '/api/v2/:path*',
+        destination: '/api/proxy?__proxy_path=v2/:path*',
+      },
+      {
+        source: '/(.*)',
+        destination: '/index.html',
+      },
+    ]);
+  });
+
+  it('has removed Cloudflare-specific deployment files', () => {
+    expect(existsSync('functions/api/[[path]].js')).toBe(false);
+    expect(existsSync('public/_routes.json')).toBe(false);
+    expect(existsSync('public/_redirects')).toBe(false);
   });
 });

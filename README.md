@@ -57,9 +57,9 @@ The browser calls exact relative paths such as `/api/v2/auth/me/`. Vite proxies 
 
 `VITE_API_PROXY_TARGET` is the Django origin used by the Vite proxy. It defaults to the existing hosted backend if omitted; use `http://127.0.0.1:8000` for full-stack local work.
 
-### Cloudflare runtime variable
+### Vercel runtime variable
 
-`BACKEND_ORIGIN` is read by the Cloudflare Pages Function at runtime and must be a complete origin. Production value:
+`BACKEND_ORIGIN` is read only by the Vercel Function at runtime and must be a complete origin. Production value:
 
 ```dotenv
 BACKEND_ORIGIN=https://noise-sensors-dashboard.herokuapp.com
@@ -83,9 +83,9 @@ Frontend membership checks prevent out-of-scope organization queries and improve
 
 Public detail pages do not render organization, visibility, firmware, production stage, device-health fields, system health, power usage or internal inference audio names. Partner detail pages render those fields only when the portal serializer returns them; unavailable values are not fabricated.
 
-## Production hosting decision: Cloudflare Pages
+## Production hosting decision: Vercel
 
-Cloudflare Pages is the production-capable host for the partner portal. Build the site with:
+Vercel is the production-capable host for the partner portal. Build the site with:
 
 ```dotenv
 VITE_API_ORIGIN=
@@ -98,9 +98,9 @@ VITE_INTERNAL_DASHBOARD_URL=https://noise-sensors-dashboard.herokuapp.com/
 
 Use `npm run build` with output directory `dist`. The repository includes:
 
-- `functions/api/[[path]].js`: same-origin edge proxy;
-- `public/_routes.json`: invokes the Function only for `/api/*`;
-- `public/_redirects`: SPA fallback to `index.html` for direct route refreshes.
+- `api/proxy.ts`: same-origin Vercel Function for API v2;
+- `vercel.json`: routes `/api/v2/*` to the Function before applying the React SPA fallback;
+- a server-side `BACKEND_ORIGIN` variable used only by the Function.
 
 The proxy rewrite is exact:
 
@@ -109,13 +109,13 @@ https://noise.sunbird.ai/api/v2/auth/login/?next=x
   -> https://noise-sensors-dashboard.herokuapp.com/api/v2/auth/login/?next=x
 ```
 
-It preserves the method, request body, query string, `Cookie`, `Origin`, `X-CSRFToken` and other request headers. It forwards the response body/status and all `Set-Cookie` values, removing an upstream `Domain` attribute so cookies belong to `noise.sunbird.ai`. API responses receive `Cache-Control: private, no-store` and `Pragma: no-cache`; authentication and portal data must not be cached.
+It preserves the method, request body, query string, `Cookie`, `X-CSRFToken` and other request headers. It sets the upstream `Origin` to the browser-visible Vercel origin for Django CSRF validation. It forwards the response body/status and all `Set-Cookie` values, removing an upstream `Domain` attribute so cookies belong to the frontend hostname. API responses receive `Cache-Control: private, no-store` and `Pragma: no-cache`; authentication and portal data must not be cached. The Function rejects proxy targets outside `/api/v2/`.
 
 Production Django must include `https://noise.sunbird.ai` in `CSRF_TRUSTED_ORIGINS`. Secure cookie settings and allowed hosts must also include the actual production topology. CORS alone is not a solution: the browser must see authentication and API traffic on the frontend origin.
 
 ### GitHub Pages limitation
 
-The existing GitHub Pages workflow uses:
+The existing GitHub Pages workflow remains the temporary public-only host and uses:
 
 ```dotenv
 VITE_API_ORIGIN=https://noise-sensors-dashboard.herokuapp.com
@@ -123,7 +123,9 @@ VITE_PARTNER_PORTAL_ENABLED=false
 VITE_BASE_PATH=/
 ```
 
-It is explicitly public-only and hides login/invitation entry points. Public browser requests go directly to Heroku and omit credentials, avoiding credentialed-CORS requirements. GitHub Pages cannot execute `functions/api/[[path]].js`; `/api/v2/...` on the GitHub Pages origin would be a static-host 404. Partner login therefore remains disabled until the site moves to Cloudflare Pages or another same-origin proxy host. Do not point Cloudflare and GitHub Pages deployments at the same production hostname simultaneously.
+It is explicitly public-only and hides login/invitation entry points. Public browser requests go directly to Heroku and omit credentials, avoiding credentialed-CORS requirements. GitHub Pages cannot execute `api/proxy.ts`; `/api/v2/...` on the GitHub Pages origin would be a static-host 404. Partner login therefore remains disabled until `noise.sunbird.ai` moves to Vercel. Do not point Vercel and GitHub Pages deployments at the same production hostname simultaneously.
+
+See [docs/vercel-deployment.md](docs/vercel-deployment.md) for account creation, GitHub import, environment configuration, preview validation, DNS cutover and rollback instructions.
 
 ## Authentication behavior
 
