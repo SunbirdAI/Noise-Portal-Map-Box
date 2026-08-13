@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchCurrentMetric, fetchScopedDevices, login } from './v2';
+import { ApiError } from './errors';
+import { apiRequest, fetchCurrentMetric, fetchScopedDevices, login } from './v2';
 
 function jsonResponse(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -57,7 +58,7 @@ describe('API v2 client', () => {
       sensorType: 'MCU',
       location: { locationId: 'location-uuid', deviceUuid: 'public-uuid', city: 'Kampala' },
     });
-    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/v2/public/devices/');
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/v2/public/devices/');
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ credentials: 'include' });
   });
 
@@ -93,6 +94,40 @@ describe('API v2 client', () => {
     const headers = fetchMock.mock.calls[1][1].headers as Headers;
     expect(headers.get('X-CSRFToken')).toBe('csrf-test-token');
     expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: 'POST', credentials: 'include' });
+  });
+
+  it('keeps invalid credentials distinct from CSRF initialization failure', async () => {
+    document.cookie = 'csrftoken=existing-token; path=/';
+    fetchMock.mockResolvedValueOnce(jsonResponse({ detail: 'Invalid username/email or password.' }, 403));
+
+    await expect(login('wrong@example.test', 'wrong')).rejects.toMatchObject({
+      status: 403,
+      kind: 'http',
+      message: 'Invalid username/email or password.',
+    });
+
+    document.cookie = 'csrftoken=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+    fetchMock.mockResolvedValueOnce(jsonResponse({ detail: 'Proxy unavailable.' }, 502));
+
+    await expect(login('partner', 'password')).rejects.toMatchObject({
+      status: 502,
+      kind: 'csrf',
+      message: 'Authentication security check failed: Proxy unavailable.',
+    });
+  });
+
+  it('announces portal 401/403 responses for session revalidation but not resource 404', async () => {
+    const listener = vi.fn();
+    window.addEventListener('sunbird:portal-auth-failure', listener);
+    fetchMock.mockResolvedValueOnce(jsonResponse({ detail: 'Authentication required.' }, 403));
+
+    await expect(apiRequest('/api/v2/portal/organizations/org-1/devices/')).rejects.toBeInstanceOf(ApiError);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    fetchMock.mockResolvedValueOnce(jsonResponse({ detail: 'Not found.' }, 404));
+    await expect(apiRequest('/api/v2/portal/organizations/org-1/devices/device-2/')).rejects.toBeInstanceOf(ApiError);
+    expect(listener).toHaveBeenCalledTimes(1);
+    window.removeEventListener('sunbird:portal-auth-failure', listener);
   });
 
   it('treats a missing current metric as an empty device reading', async () => {

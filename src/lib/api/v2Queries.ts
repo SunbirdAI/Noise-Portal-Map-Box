@@ -37,6 +37,7 @@ export const scopedLiveSensorQuery = (scope: ApiScope, device: ScopedDevice | un
     enabled: Boolean(device?.id),
     staleTime: 45_000,
     refetchInterval: LIVE_SENSOR_POLL_MS,
+    refetchIntervalInBackground: false,
     refetchOnWindowFocus: 'always' as const,
   });
 

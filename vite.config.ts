@@ -27,7 +27,6 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           headers: { Origin: apiProxyTarget },
           secure: apiProxyTarget.startsWith('https://'),
-          rewrite: (path) => path.replace(/^\/api(?=\/|$)/, ''),
         },
       },
     },

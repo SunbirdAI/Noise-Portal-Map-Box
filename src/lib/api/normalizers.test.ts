@@ -118,7 +118,7 @@ describe('API normalizers', () => {
   it('normalizes paginated metric history and range metadata', () => {
     const page = normalizeMetricPage({
       count: 2,
-      next: 'http://noise-sensors-dashboard.herokuapp.com/device_metrics/device/by-device-id/SB1006/history/?page=2',
+      next: 'http://noise-sensors-dashboard.herokuapp.com/api/v2/public/devices/device-1/metrics/aggregates/?page=2',
       range: {
         start_date: '2026-06-12T00:00:00+03:00',
         end_date: '2026-06-12T23:59:59+03:00',

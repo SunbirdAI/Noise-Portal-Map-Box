@@ -14,22 +14,18 @@ import {
   revokeInvitation,
   updateMembership,
 } from '../lib/api/v2';
+import { ApiError } from '../lib/api/errors';
 import { invitationsQuery, membersQuery } from '../lib/api/v2Queries';
 import { formatDateTime } from '../lib/format';
-import type { OrganizationSummary, PartnerRole } from '../models/portal';
+import type { ManagedMembership, PartnerRole } from '../models/portal';
 
 export default function PartnerUsersPage() {
   const { organizationId = '' } = useParams();
-  const { user } = useAuth();
+  const auth = useAuth();
+  const { user } = auth;
   const queryClient = useQueryClient();
   const membership = membershipForOrganization(user, organizationId);
-  const hasPlatformAccess = Boolean(user?.isPlatformAdministrator);
-  const canManageUsers = membership?.role === 'PARTNER_ADMIN' || hasPlatformAccess;
-  const organization: OrganizationSummary = membership?.organization ?? {
-    id: organizationId,
-    name: 'Organization',
-    slug: '',
-  };
+  const canManageUsers = membership?.role === 'PARTNER_ADMIN';
   const membersResult = useQuery(membersQuery(organizationId, canManageUsers));
   const invitationsResult = useQuery(invitationsQuery(organizationId, canManageUsers));
   const [email, setEmail] = useState('');
@@ -37,12 +33,20 @@ export default function PartnerUsersPage() {
   const [formMessage, setFormMessage] = useState<string>();
   const [actionError, setActionError] = useState<string>();
 
+  async function refreshAccessData() {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['portal', organizationId, 'members'] }),
+      queryClient.invalidateQueries({ queryKey: ['portal', organizationId, 'invitations'] }),
+      auth.refresh(),
+    ]);
+  }
+
   const memberMutation = useMutation({
     mutationFn: ({ membershipId, isActive }: { membershipId: string; isActive: boolean }) =>
       updateMembership(organizationId, membershipId, isActive),
     onSuccess: async () => {
       setActionError(undefined);
-      await queryClient.invalidateQueries({ queryKey: ['portal', organizationId, 'members'] });
+      await refreshAccessData();
     },
     onError: (error) => setActionError(error instanceof Error ? error.message : 'The member could not be updated.'),
   });
@@ -53,11 +57,16 @@ export default function PartnerUsersPage() {
       setEmail('');
       setFormMessage(`Invitation created for ${invitation.email}.`);
       setActionError(undefined);
-      await queryClient.invalidateQueries({ queryKey: ['portal', organizationId, 'invitations'] });
+      await refreshAccessData();
     },
     onError: async (error) => {
       setFormMessage(undefined);
-      setActionError(error instanceof Error ? error.message : 'The invitation could not be created.');
+      const message = error instanceof Error ? error.message : 'The invitation could not be created.';
+      setActionError(
+        error instanceof ApiError && error.status === 503
+          ? `${message} The invitation list has been refreshed because the invitation may still have been saved.`
+          : message,
+      );
       await queryClient.invalidateQueries({ queryKey: ['portal', organizationId, 'invitations'] });
     },
   });
@@ -67,7 +76,7 @@ export default function PartnerUsersPage() {
     onSuccess: async () => {
       setFormMessage('Invitation email resent.');
       setActionError(undefined);
-      await queryClient.invalidateQueries({ queryKey: ['portal', organizationId, 'invitations'] });
+      await refreshAccessData();
     },
     onError: (error) => setActionError(error instanceof Error ? error.message : 'The invitation could not be resent.'),
   });
@@ -77,12 +86,32 @@ export default function PartnerUsersPage() {
     onSuccess: async () => {
       setFormMessage('Invitation revoked.');
       setActionError(undefined);
-      await queryClient.invalidateQueries({ queryKey: ['portal', organizationId, 'invitations'] });
+      await refreshAccessData();
     },
     onError: (error) => setActionError(error instanceof Error ? error.message : 'The invitation could not be revoked.'),
   });
 
-  if (!canManageUsers) {
+  const activeAdminCount =
+    membersResult.data?.filter((item) => item.isActive && item.role === 'PARTNER_ADMIN').length ?? 0;
+  const administrationMutationPending =
+    memberMutation.isPending || invitationMutation.isPending || resendMutation.isPending || revokeMutation.isPending;
+
+  function deactivationBlockedReason(item: ManagedMembership): string | undefined {
+    if (!item.isActive) return undefined;
+    if (item.user.id === user?.id) return 'You cannot deactivate your own membership.';
+    if (item.role === 'PARTNER_ADMIN' && activeAdminCount <= 1) {
+      return 'The last active partner administrator cannot be deactivated.';
+    }
+    return undefined;
+  }
+
+  function handleMembershipAction(item: ManagedMembership) {
+    if (deactivationBlockedReason(item)) return;
+    if (item.isActive && !window.confirm(`Deactivate ${item.user.username || item.user.email}?`)) return;
+    memberMutation.mutate({ membershipId: item.id, isActive: !item.isActive });
+  }
+
+  if (!membership || membership.role !== 'PARTNER_ADMIN') {
     return (
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
         <StatusPanel
@@ -96,6 +125,8 @@ export default function PartnerUsersPage() {
   if (membersResult.isPending || invitationsResult.isPending) {
     return <LoadingPanel title="Loading organization users" body="Fetching members and invitations." />;
   }
+
+  const organization = membership.organization;
 
   return (
     <>
@@ -135,7 +166,7 @@ export default function PartnerUsersPage() {
             onSubmit={(event) => {
               event.preventDefault();
               setFormMessage(undefined);
-              invitationMutation.mutate();
+              if (!administrationMutationPending) invitationMutation.mutate();
             }}
           >
             <label className="grid gap-1.5 text-sm font-bold text-slate-700">
@@ -162,7 +193,7 @@ export default function PartnerUsersPage() {
             </label>
             <button
               type="submit"
-              disabled={invitationMutation.isPending}
+              disabled={administrationMutationPending}
               className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-extrabold text-white hover:bg-slate-800 disabled:opacity-60"
             >
               <MailPlus size={16} aria-hidden="true" />
@@ -180,29 +211,36 @@ export default function PartnerUsersPage() {
             <InlineError label="Members could not be loaded." onRetry={() => void membersResult.refetch()} />
           ) : membersResult.data?.length ? (
             <div className="divide-y divide-slate-100">
-              {membersResult.data.map((item) => (
-                <div key={item.id} className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
-                  <div className="min-w-0">
-                    <p className="truncate font-extrabold text-slate-950">{item.user.username || item.user.email}</p>
-                    <p className="truncate text-sm text-slate-500">{item.user.email || 'No email address'}</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <Badge tone={item.role === 'PARTNER_ADMIN' ? 'blue' : 'neutral'}>
-                        {item.role === 'PARTNER_ADMIN' ? 'Administrator' : 'Member'}
-                      </Badge>
-                      <Badge tone={item.isActive ? 'green' : 'neutral'}>{item.isActive ? 'Active' : 'Inactive'}</Badge>
+              {membersResult.data.map((item) => {
+                const disabledReason = deactivationBlockedReason(item);
+                return (
+                  <div key={item.id} className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
+                    <div className="min-w-0">
+                      <p className="truncate font-extrabold text-slate-950">{item.user.username || item.user.email}</p>
+                      <p className="truncate text-sm text-slate-500">{item.user.email || 'No email address'}</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <Badge tone={item.role === 'PARTNER_ADMIN' ? 'blue' : 'neutral'}>
+                          {item.role === 'PARTNER_ADMIN' ? 'Administrator' : 'Member'}
+                        </Badge>
+                        <Badge tone={item.isActive ? 'green' : 'neutral'}>{item.isActive ? 'Active' : 'Inactive'}</Badge>
+                      </div>
+                    </div>
+                    <div className="max-w-xs text-right">
+                      <button
+                        type="button"
+                        disabled={administrationMutationPending || Boolean(disabledReason)}
+                        title={disabledReason}
+                        onClick={() => handleMembershipAction(item)}
+                        className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-extrabold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {item.isActive ? <UserX size={16} aria-hidden="true" /> : <UserCheck size={16} aria-hidden="true" />}
+                        {item.isActive ? 'Deactivate' : 'Reactivate'}
+                      </button>
+                      {disabledReason ? <p className="mt-1 text-xs text-slate-500">{disabledReason}</p> : null}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    disabled={memberMutation.isPending}
-                    onClick={() => memberMutation.mutate({ membershipId: item.id, isActive: !item.isActive })}
-                    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-extrabold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                  >
-                    {item.isActive ? <UserX size={16} aria-hidden="true" /> : <UserCheck size={16} aria-hidden="true" />}
-                    {item.isActive ? 'Deactivate' : 'Reactivate'}
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <EmptyRow label="No organization members were returned." />
@@ -234,7 +272,7 @@ export default function PartnerUsersPage() {
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        disabled={resendMutation.isPending || revokeMutation.isPending}
+                        disabled={administrationMutationPending}
                         onClick={() => resendMutation.mutate(invitation.id)}
                         className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-extrabold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                       >
@@ -243,8 +281,12 @@ export default function PartnerUsersPage() {
                       </button>
                       <button
                         type="button"
-                        disabled={resendMutation.isPending || revokeMutation.isPending}
-                        onClick={() => revokeMutation.mutate(invitation.id)}
+                        disabled={administrationMutationPending}
+                        onClick={() => {
+                          if (window.confirm(`Revoke the invitation for ${invitation.email}?`)) {
+                            revokeMutation.mutate(invitation.id);
+                          }
+                        }}
                         className="inline-flex items-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm font-extrabold text-red-700 hover:bg-red-50 disabled:opacity-60"
                       >
                         <XCircle size={15} aria-hidden="true" />

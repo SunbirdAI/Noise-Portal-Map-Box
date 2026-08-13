@@ -45,6 +45,7 @@ export default function LocationDetailPage({
   const device = liveData?.device ?? (scopedDevice ? scopedDeviceInfo(scopedDevice) : undefined);
   const inferredType = liveData?.type ?? scopedDevice?.sensorType ?? 'Unknown';
   const isAiSensor = inferredType === 'AI';
+  const isPartnerScope = scope.kind === 'organization';
   const liveMetric = useMemo(() => liveDataToNoiseMetric(liveData), [liveData]);
 
   const availableMetrics = useMemo<NoiseMetric[]>(() => {
@@ -168,15 +169,26 @@ export default function LocationDetailPage({
               <Metadata label="Division" value={location?.division ?? 'No data'} />
               <Metadata label="Parish" value={location?.parish ?? 'No data'} />
               <Metadata label="Coordinates" value={location ? `${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}` : 'No data'} />
+              {isPartnerScope ? (
+                <>
+                  <Metadata label="Organization" value={scopedDevice.organization?.name ?? 'No data'} />
+                  <Metadata label="Visibility" value={scopedDevice.visibility ?? 'No data'} />
+                </>
+              ) : null}
             </dl>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <h2 className="text-sm font-extrabold uppercase tracking-[0.08em] text-slate-500">Limits and Health</h2>
+            <h2 className="text-sm font-extrabold uppercase tracking-[0.08em] text-slate-500">
+              {isPartnerScope ? 'Limits and health' : 'Limits and latest reading'}
+            </h2>
             <dl className="mt-4 grid gap-3 text-sm">
               <Metadata label="Day limit" value={formatDb(location?.dayLimit)} />
               <Metadata label="Night limit" value={formatDb(location?.nightLimit)} />
-              <Metadata label="Last seen" value={formatDateTime(device?.lastSeen ?? healthMetric?.uploadedAt)} />
-              <Metadata label="Updated" value={formatRelative(device?.lastSeen ?? healthMetric?.uploadedAt)} />
+              {isPartnerScope ? <Metadata label="Last seen" value={formatDateTime(device?.lastSeen)} /> : null}
+              <Metadata
+                label="Updated"
+                value={formatRelative(isPartnerScope ? device?.lastSeen ?? healthMetric?.uploadedAt : healthMetric?.uploadedAt)}
+              />
             </dl>
           </div>
         </div>
@@ -246,20 +258,22 @@ export default function LocationDetailPage({
         </Suspense>
 
         <aside className="grid content-start gap-5">
-          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <h2 className="flex items-center gap-2 text-lg font-extrabold text-slate-950">
-              <Battery size={18} aria-hidden="true" />
-              Device Health
-            </h2>
-            <dl className="mt-4 grid gap-3 text-sm">
-              <Metadata label="Battery" value={formatNumber(healthMetric?.batteryVoltage, 'V')} />
-              <Metadata label="Panel voltage" value={formatNumber(healthMetric?.panelVoltage, 'V')} />
-              <Metadata label="Signal strength" value={formatNumber(healthMetric?.signalStrength)} />
-              <Metadata label="Data balance" value={formatNumber(healthMetric?.dataBalance)} />
-              <Metadata label="Firmware" value={device?.versionNumber ?? 'No data'} />
-              <Metadata label="Stage" value={device?.productionStage ?? 'No data'} />
-            </dl>
-          </section>
+          {isPartnerScope ? (
+            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+              <h2 className="flex items-center gap-2 text-lg font-extrabold text-slate-950">
+                <Battery size={18} aria-hidden="true" />
+                Device Health
+              </h2>
+              <dl className="mt-4 grid gap-3 text-sm">
+                <Metadata label="Battery" value={formatNumber(healthMetric?.batteryVoltage, 'V')} />
+                <Metadata label="Panel voltage" value={formatNumber(healthMetric?.panelVoltage, 'V')} />
+                <Metadata label="Signal strength" value={formatNumber(healthMetric?.signalStrength)} />
+                <Metadata label="Data balance" value={formatNumber(healthMetric?.dataBalance)} />
+                <Metadata label="Firmware" value={device?.versionNumber ?? 'No data'} />
+                <Metadata label="Stage" value={device?.productionStage ?? 'No data'} />
+              </dl>
+            </section>
+          ) : null}
 
           <AiPanels
             enabled={isAiSensor}
@@ -269,6 +283,7 @@ export default function LocationDetailPage({
             envError={liveSensorResult.isError}
             inference={liveData?.inference}
             environmental={liveData?.environment}
+            partner={isPartnerScope}
           />
         </aside>
       </section>
@@ -293,12 +308,14 @@ function AiPanels({
   envError,
   inference,
   environmental,
+  partner,
 }: {
   enabled: boolean;
   aiLoading: boolean;
   envLoading: boolean;
   aiError: boolean;
   envError: boolean;
+  partner: boolean;
   inference?: { className?: string; probability?: number; audioName?: string; createdAt?: string };
   environmental?: {
     temperature?: number;
@@ -338,7 +355,7 @@ function AiPanels({
             <dl className="mt-4 grid gap-3 text-sm">
               <Metadata label="Class" value={inference.className ?? 'No data'} />
               <Metadata label="Probability" value={formatNumber(inference.probability === undefined ? undefined : inference.probability * 100, '%')} />
-              <Metadata label="Audio sample" value={inference.audioName ?? 'No data'} />
+              {partner ? <Metadata label="Audio sample" value={inference.audioName ?? 'No data'} /> : null}
               <Metadata label="Created" value={formatDateTime(inference.createdAt)} />
             </dl>
           ) : (
@@ -361,8 +378,12 @@ function AiPanels({
               <Metadata label="Humidity" value={formatNumber(environmental.humidity, '%')} />
               <Metadata label="Pressure" value={formatNumber(environmental.pressure)} />
               <Metadata label="Air quality" value={formatNumber(environmental.airQuality)} />
-              <Metadata label="System temperature" value={formatNumber(environmental.systemTemperature, 'C')} />
-              <Metadata label="Power usage" value={formatNumber(environmental.powerUsage, 'W')} />
+              {partner ? (
+                <>
+                  <Metadata label="System temperature" value={formatNumber(environmental.systemTemperature, 'C')} />
+                  <Metadata label="Power usage" value={formatNumber(environmental.powerUsage, 'W')} />
+                </>
+              ) : null}
               <Metadata label="Noise reading" value={formatDb(environmental.dbLevel)} />
               <Metadata label="Created" value={formatDateTime(environmental.createdAt)} />
             </dl>

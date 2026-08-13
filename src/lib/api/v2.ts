@@ -1,4 +1,4 @@
-import { API_BASE_URL } from '../../config/env';
+import { API_ORIGIN } from '../../config/env';
 import type {
   ApiScope,
   AuthUser,
@@ -25,6 +25,7 @@ import type {
 import { extractCoordinates } from '../coordinates';
 import { detectSensorType } from '../sensors';
 import { ApiError } from './errors';
+import { notifyPortalAuthFailure } from '../../auth/sessionEvents';
 import {
   normalizeAdvisorInsight,
   normalizeAiInference,
@@ -38,6 +39,10 @@ import {
 const REQUEST_TIMEOUT_MS = 15_000;
 const HISTORY_TIMEOUT_MS = 25_000;
 const MAX_PAGES = 200;
+const MAX_CONCURRENT_CURRENT_REQUESTS = 8;
+
+let activeCurrentRequests = 0;
+const currentRequestQueue: Array<() => void> = [];
 
 type JsonRecord = Record<string, unknown>;
 
@@ -61,10 +66,10 @@ function booleanValue(value: unknown): boolean {
 function resolveApiUrl(pathOrUrl: string): string {
   if (/^https?:\/\//i.test(pathOrUrl)) {
     const url = new URL(pathOrUrl);
-    return `${API_BASE_URL}${url.pathname}${url.search}${url.hash}`;
+    return `${API_ORIGIN}${url.pathname}${url.search}${url.hash}`;
   }
 
-  return `${API_BASE_URL}${pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`}`;
+  return `${API_ORIGIN}${pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`}`;
 }
 
 function errorMessage(payload: unknown, status: number): string {
@@ -86,6 +91,24 @@ function errorMessage(payload: unknown, status: number): string {
   }
 
   return `Request failed with status ${status}`;
+}
+
+function isPortalRequest(url: string): boolean {
+  return new URL(url, window.location.origin).pathname.startsWith('/api/v2/portal/');
+}
+
+async function withCurrentRequestSlot<T>(request: () => Promise<T>): Promise<T> {
+  if (activeCurrentRequests >= MAX_CONCURRENT_CURRENT_REQUESTS) {
+    await new Promise<void>((resolve) => currentRequestQueue.push(resolve));
+  }
+
+  activeCurrentRequests += 1;
+  try {
+    return await request();
+  } finally {
+    activeCurrentRequests -= 1;
+    currentRequestQueue.shift()?.();
+  }
 }
 
 export async function apiRequest<T>(pathOrUrl: string, options: RequestOptions = {}): Promise<T> {
@@ -118,6 +141,9 @@ export async function apiRequest<T>(pathOrUrl: string, options: RequestOptions =
     const payload = contentType.includes('application/json') ? await response.json() : await response.text();
 
     if (!response.ok) {
+      if ((response.status === 401 || response.status === 403) && isPortalRequest(url)) {
+        notifyPortalAuthFailure();
+      }
       throw new ApiError(errorMessage(payload, response.status), url, response.status, payload);
     }
 
@@ -128,7 +154,7 @@ export async function apiRequest<T>(pathOrUrl: string, options: RequestOptions =
     }
 
     if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new ApiError('Request timed out', url);
+      throw new ApiError('Request timed out', url, undefined, undefined, 'timeout');
     }
 
     throw new ApiError(error instanceof Error ? error.message : 'Request failed', url);
@@ -148,11 +174,25 @@ function readCookie(name: string): string | undefined {
 }
 
 export async function initializeCsrf(): Promise<string> {
-  await apiRequest<{ detail: string }>('/api/v2/auth/csrf/');
+  const csrfUrl = resolveApiUrl('/api/v2/auth/csrf/');
+  try {
+    await apiRequest<{ detail: string }>('/api/v2/auth/csrf/');
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw new ApiError(
+        `Authentication security check failed: ${error.message}`,
+        csrfUrl,
+        error.status,
+        error.details,
+        'csrf',
+      );
+    }
+    throw error;
+  }
   const token = readCookie('csrftoken');
 
   if (!token) {
-    throw new ApiError('The backend did not provide a CSRF token.', resolveApiUrl('/api/v2/auth/csrf/'));
+    throw new ApiError('The backend did not provide a CSRF token.', csrfUrl, undefined, undefined, 'csrf');
   }
 
   return token;
@@ -323,20 +363,26 @@ async function optionalRequest<T>(path: string, normalize: (value: unknown) => T
 }
 
 export async function fetchCurrentMetric(scope: ApiScope, deviceId: string): Promise<NoiseMetric | undefined> {
-  return optionalRequest(`${scopeBasePath(scope)}/devices/${encodeURIComponent(deviceId)}/metrics/current/`, normalizeMetric);
+  return withCurrentRequestSlot(() =>
+    optionalRequest(`${scopeBasePath(scope)}/devices/${encodeURIComponent(deviceId)}/metrics/current/`, normalizeMetric),
+  );
 }
 
 export async function fetchCurrentEnvironmental(scope: ApiScope, deviceId: string): Promise<EnvironmentalReading | undefined> {
-  return optionalRequest(
-    `${scopeBasePath(scope)}/devices/${encodeURIComponent(deviceId)}/environmental/current/`,
-    normalizeEnvironmentalReading,
+  return withCurrentRequestSlot(() =>
+    optionalRequest(
+      `${scopeBasePath(scope)}/devices/${encodeURIComponent(deviceId)}/environmental/current/`,
+      normalizeEnvironmentalReading,
+    ),
   );
 }
 
 export async function fetchCurrentInference(scope: ApiScope, deviceId: string): Promise<AiInference | undefined> {
-  return optionalRequest(
-    `${scopeBasePath(scope)}/devices/${encodeURIComponent(deviceId)}/inferences/current/`,
-    normalizeAiInference,
+  return withCurrentRequestSlot(() =>
+    optionalRequest(
+      `${scopeBasePath(scope)}/devices/${encodeURIComponent(deviceId)}/inferences/current/`,
+      normalizeAiInference,
+    ),
   );
 }
 

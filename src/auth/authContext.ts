@@ -1,11 +1,12 @@
 import { createContext, useContext } from 'react';
 import type { AuthUser } from '../models/portal';
 
-export type AuthStatus = 'loading' | 'anonymous' | 'authenticated';
+export type AuthStatus = 'loading' | 'anonymous' | 'authenticated' | 'error';
 
 export interface AuthContextValue {
   status: AuthStatus;
   user: AuthUser | null;
+  error?: string;
   login: (identifier: string, password: string) => Promise<AuthUser>;
   logout: () => Promise<void>;
   refresh: () => Promise<AuthUser | null>;

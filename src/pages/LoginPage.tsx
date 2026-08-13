@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { KeyRound, LogIn } from 'lucide-react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/authContext';
+import { PARTNER_PORTAL_ENABLED, PASSWORD_RESET_URL } from '../config/env';
+import StatusPanel from '../components/StatusPanel';
 
 interface LoginLocationState {
   from?: string;
@@ -19,6 +21,17 @@ export default function LoginPage() {
 
   if (auth.status === 'authenticated') {
     return <Navigate to={state?.from ?? '/portal'} replace />;
+  }
+
+  if (!PARTNER_PORTAL_ENABLED) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+        <StatusPanel
+          title="Partner sign in is not available on this deployment"
+          body="This host is configured for anonymous public devices only. Use the production partner portal to sign in."
+        />
+      </div>
+    );
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -59,9 +72,17 @@ export default function LoginPage() {
               className="rounded-lg border border-slate-200 px-3 py-2.5 font-medium outline-none transition focus:border-lagoon focus:ring-2 focus:ring-lagoon/20"
             />
           </label>
-          <label className="grid gap-1.5 text-sm font-bold text-slate-700">
-            Password
+          <div className="grid gap-1.5 text-sm font-bold text-slate-700">
+            <span className="flex items-center justify-between gap-3">
+              <label htmlFor="login-password">Password</label>
+              {PASSWORD_RESET_URL ? (
+                <a href={PASSWORD_RESET_URL} className="font-semibold text-lagoon hover:underline">
+                  Forgot password?
+                </a>
+              ) : null}
+            </span>
             <input
+              id="login-password"
               type="password"
               autoComplete="current-password"
               required
@@ -69,11 +90,17 @@ export default function LoginPage() {
               onChange={(event) => setPassword(event.target.value)}
               className="rounded-lg border border-slate-200 px-3 py-2.5 font-medium outline-none transition focus:border-lagoon focus:ring-2 focus:ring-lagoon/20"
             />
-          </label>
+          </div>
 
           {error ? (
             <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800" role="alert">
               {error}
+            </p>
+          ) : null}
+
+          {auth.status === 'error' ? (
+            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900" role="status">
+              Session restoration is unavailable. You can retry sign in, but the authentication service may still be offline.
             </p>
           ) : null}
 

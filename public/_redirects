@@ -1,0 +1,3 @@
+# Cloudflare Pages SPA fallback. The /api/* Function is selected before static
+# asset fallback and therefore is not served index.html.
+/* /index.html 200

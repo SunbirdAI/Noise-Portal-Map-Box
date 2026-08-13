@@ -3,16 +3,14 @@ import { membershipForOrganization } from '../auth/access';
 import { useAuth } from '../auth/authContext';
 import PortalNavigation from '../components/PortalNavigation';
 import StatusPanel from '../components/StatusPanel';
-import type { OrganizationSummary } from '../models/portal';
 import LocationDetailPage from './LocationDetailPage';
 
 export default function PortalDeviceDetailPage() {
   const { organizationId = '' } = useParams();
   const { user } = useAuth();
   const membership = membershipForOrganization(user, organizationId);
-  const hasPlatformAccess = Boolean(user?.isPlatformAdministrator);
 
-  if (!membership && !hasPlatformAccess) {
+  if (!membership) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8">
         <StatusPanel
@@ -23,12 +21,8 @@ export default function PortalDeviceDetailPage() {
     );
   }
 
-  const organization: OrganizationSummary = membership?.organization ?? {
-    id: organizationId,
-    name: 'Organization devices',
-    slug: '',
-  };
-  const canManageUsers = membership?.role === 'PARTNER_ADMIN' || hasPlatformAccess;
+  const organization = membership.organization;
+  const canManageUsers = membership.role === 'PARTNER_ADMIN';
   const dashboardPath = `/portal/organizations/${organizationId}`;
 
   return (
