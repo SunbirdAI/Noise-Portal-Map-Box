@@ -5,11 +5,11 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "^/api/v2/(.*)$",
-      "destination": "/api/proxy?__proxy_path=v2/$1"
+      "source": "/api/:__proxy_path(v2/.*)",
+      "destination": "/api/proxy?__proxy_path=:__proxy_path"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!api/v2(?:/|$)).*)",
       "destination": "/index.html"
     }
   ]

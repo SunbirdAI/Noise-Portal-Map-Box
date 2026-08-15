@@ -25,21 +25,24 @@ describe('Vercel partner deployment configuration', () => {
     expect(configuration.outputDirectory).toBe('dist');
     expect(configuration.rewrites).toEqual([
       {
-        source: '^/api/v2/(.*)$',
-        destination: '/api/proxy?__proxy_path=v2/$1',
+        source: '/api/:__proxy_path(v2/.*)',
+        destination: '/api/proxy?__proxy_path=:__proxy_path',
       },
       {
-        source: '/(.*)',
+        source: '/((?!api/v2(?:/|$)).*)',
         destination: '/index.html',
       },
     ]);
 
-    const apiRewrite = configuration.rewrites[0];
-    const apiRoute = new RegExp(apiRewrite.source);
-    expect(apiRoute.test('/api/v2/public/devices/')).toBe(true);
-    expect(apiRoute.test('/api/v2/auth/me/')).toBe(true);
-    expect(apiRoute.test('/api/v2/public/devices')).toBe(true);
-    expect(apiRoute.test('/portal/organizations/example')).toBe(false);
+    const compiledApiRoute = /^\/api\/(v2\/.*)$/;
+    expect(compiledApiRoute.test('/api/v2/public/devices/')).toBe(true);
+    expect(compiledApiRoute.test('/api/v2/auth/me/')).toBe(true);
+    expect(compiledApiRoute.test('/api/v2/public/devices')).toBe(true);
+    expect(compiledApiRoute.test('/portal/organizations/example')).toBe(false);
+
+    const spaFallback = /^\/((?!api\/v2(?:\/|$)).*)$/;
+    expect(spaFallback.test('/portal/organizations/example')).toBe(true);
+    expect(spaFallback.test('/api/v2/public/devices/')).toBe(false);
   });
 
   it('has removed Cloudflare-specific deployment files', () => {

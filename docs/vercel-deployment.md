@@ -80,7 +80,7 @@ Before touching `noise.sunbird.ai`, confirm on the preview:
 
 1. `/` loads public devices.
 2. The Network panel shows browser requests to the preview hostname at `/api/v2/public/...`.
-3. `GET /api/v2/public/devices/` returns HTTP 200 with `Content-Type: application/json`. If it returns `index.html` or `text/html`, the SPA fallback is intercepting the API route and the deployment must not be promoted.
+3. `GET /api/v2/public/devices/` returns HTTP 200 with `Content-Type: application/json`. If it returns `index.html` or `text/html`, the SPA fallback is intercepting the API route and the deployment must not be promoted. The committed fallback deliberately excludes `/api/v2/`, so such a response also indicates that the deployment is not using the current `vercel.json`.
 4. The Function forwards the request to Heroku and returns the public device collection.
 5. Direct refresh works for `/login`, `/portal`, and `/accept-invitation/test-token` without a Vercel 404. With Preview partner mode disabled, these routes may show the public-only unavailable state; they must still load React.
 6. `/api/v2/auth/csrf/` responses are `Cache-Control: private, no-store`.
