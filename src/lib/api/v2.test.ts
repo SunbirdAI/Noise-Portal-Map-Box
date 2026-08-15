@@ -72,6 +72,20 @@ describe('API v2 client', () => {
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ credentials: 'include' });
   });
 
+  it('rejects an HTML SPA fallback instead of treating it as an empty API page', async () => {
+    fetchMock.mockResolvedValue(
+      new Response('<!doctype html><html><body>Sunbird</body></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+
+    await expect(fetchScopedDevices({ kind: 'public' })).rejects.toMatchObject({
+      status: 200,
+      message: 'The API returned an unexpected non-JSON response. Check the deployment proxy routing.',
+    });
+  });
+
   it('uses the explicit organization UUID for portal device scope', async () => {
     fetchMock.mockResolvedValue(jsonResponse({ count: 0, next: null, previous: null, results: [] }));
 

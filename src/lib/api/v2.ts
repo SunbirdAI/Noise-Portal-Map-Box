@@ -145,14 +145,24 @@ export async function apiRequest<T>(pathOrUrl: string, options: RequestOptions =
       return undefined as T;
     }
 
-    const contentType = response.headers.get('content-type') ?? '';
-    const payload = contentType.includes('application/json') ? await response.json() : await response.text();
+    const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+    const isJsonResponse = contentType.includes('json');
+    const payload = isJsonResponse ? await response.json() : await response.text();
 
     if (!response.ok) {
       if ((response.status === 401 || response.status === 403) && isPortalRequest(url)) {
         notifyPortalAuthFailure();
       }
       throw new ApiError(errorMessage(payload, response.status), url, response.status, payload);
+    }
+
+    if (!isJsonResponse) {
+      throw new ApiError(
+        'The API returned an unexpected non-JSON response. Check the deployment proxy routing.',
+        url,
+        response.status,
+        payload,
+      );
     }
 
     return payload as T;
