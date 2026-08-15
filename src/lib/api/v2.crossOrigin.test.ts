@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../config/env', () => ({
   API_ORIGIN: 'https://noise-sensors-dashboard.herokuapp.com',
+  API_DEBUG_ENABLED: false,
 }));
 
 import { fetchCurrentMetric, fetchMe, fetchScopedDevices } from './v2';

@@ -1,10 +1,7 @@
 export default {
   async fetch(request: Request): Promise<Response> {
     if (!process.env.BACKEND_ORIGIN) {
-      return Response.json(
-        { detail: 'The API proxy is not configured.' },
-        { status: 503, headers: { 'Cache-Control': 'private, no-store' } },
-      );
+      return proxyJson({ detail: 'The API proxy is not configured.' }, 503);
     }
 
     const backendOrigin = normalizeOrigin(process.env.BACKEND_ORIGIN);
@@ -12,7 +9,7 @@ export default {
     const upstreamPath = incomingUrl.searchParams.get('__proxy_path');
 
     if (!upstreamPath || !isAllowedApiPath(upstreamPath)) {
-      return Response.json({ detail: 'Only API v2 paths can be proxied.' }, { status: 400 });
+      return proxyJson({ detail: 'Only API v2 paths can be proxied.' }, 400);
     }
 
     incomingUrl.searchParams.delete('__proxy_path');
@@ -41,6 +38,7 @@ export default {
     responseHeaders.delete('transfer-encoding');
     responseHeaders.set('Cache-Control', 'private, no-store');
     responseHeaders.set('Pragma', 'no-cache');
+    responseHeaders.set('X-Sunbird-Api-Proxy', 'vercel-function');
     copyHostOnlyCookies(upstreamResponse.headers, responseHeaders);
 
     return new Response(upstreamResponse.body, {
@@ -50,6 +48,17 @@ export default {
     });
   },
 };
+
+function proxyJson(payload: Record<string, unknown>, status: number): Response {
+  return Response.json(payload, {
+    status,
+    headers: {
+      'Cache-Control': 'private, no-store',
+      Pragma: 'no-cache',
+      'X-Sunbird-Api-Proxy': 'vercel-function',
+    },
+  });
+}
 
 function normalizeOrigin(value: string): string {
   const url = new URL(value);

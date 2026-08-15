@@ -33,3 +33,9 @@ export const PASSWORD_RESET_URL = import.meta.env.VITE_PASSWORD_RESET_URL?.trim(
 export const INTERNAL_DASHBOARD_URL = import.meta.env.VITE_INTERNAL_DASHBOARD_URL?.trim() ?? '';
 
 export const SHOW_API_ORIGIN = import.meta.env.DEV && import.meta.env.VITE_SHOW_API_ORIGIN === 'true';
+
+/**
+ * Opt-in browser-console diagnostics. This value is public build configuration,
+ * so it must never contain secrets.
+ */
+export const API_DEBUG_ENABLED = import.meta.env.VITE_API_DEBUG === 'true';

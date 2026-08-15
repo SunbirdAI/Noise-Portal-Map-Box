@@ -51,6 +51,7 @@ The browser calls exact relative paths such as `/api/v2/auth/me/`. Vite proxies 
 | `VITE_PASSWORD_RESET_URL` | Optional | Existing password-reset page. “Forgot password?” is hidden when this is empty. |
 | `VITE_INTERNAL_DASHBOARD_URL` | Optional | Link shown to a platform-only account. It must point to the server-rendered Sunbird internal dashboard, not a React admin page. |
 | `VITE_SHOW_API_ORIGIN` | Optional | Development-only diagnostic host label. It has no effect in a production build. |
+| `VITE_API_DEBUG` | Optional | Set to `true` temporarily to log redacted API routing metadata in the browser console. Request bodies, headers, query values, cookies, CSRF values and invitation tokens are never logged. Defaults to `false`. |
 | `VITE_BASE_PATH` | Optional | Vite application base, normally `/` for `noise.sunbird.ai`. |
 
 ### Development server variable
