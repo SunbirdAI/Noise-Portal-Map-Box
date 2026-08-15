@@ -99,7 +99,7 @@ VITE_INTERNAL_DASHBOARD_URL=https://noise-sensors-dashboard.herokuapp.com/
 Use `npm run build` with output directory `dist`. The repository includes:
 
 - `api/proxy.ts`: same-origin Vercel Function for API v2;
-- `vercel.json`: routes `/api/v2/*` to the Function before applying the React SPA fallback;
+- `vercel.json`: routes every `/api/v2/...` path, including Django-style trailing-slash URLs, to the Function before applying the React SPA fallback;
 - a server-side `BACKEND_ORIGIN` variable used only by the Function.
 
 The proxy rewrite is exact:

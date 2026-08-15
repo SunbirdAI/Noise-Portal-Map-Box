@@ -25,14 +25,21 @@ describe('Vercel partner deployment configuration', () => {
     expect(configuration.outputDirectory).toBe('dist');
     expect(configuration.rewrites).toEqual([
       {
-        source: '/api/v2/:path*',
-        destination: '/api/proxy?__proxy_path=v2/:path*',
+        source: '^/api/v2/(.*)$',
+        destination: '/api/proxy?__proxy_path=v2/$1',
       },
       {
         source: '/(.*)',
         destination: '/index.html',
       },
     ]);
+
+    const apiRewrite = configuration.rewrites[0];
+    const apiRoute = new RegExp(apiRewrite.source);
+    expect(apiRoute.test('/api/v2/public/devices/')).toBe(true);
+    expect(apiRoute.test('/api/v2/auth/me/')).toBe(true);
+    expect(apiRoute.test('/api/v2/public/devices')).toBe(true);
+    expect(apiRoute.test('/portal/organizations/example')).toBe(false);
   });
 
   it('has removed Cloudflare-specific deployment files', () => {
