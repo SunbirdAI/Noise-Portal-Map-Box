@@ -1,4 +1,4 @@
-import { API_ORIGIN } from '../../config/env';
+import { API_DEBUG_ENABLED, API_ORIGIN } from '../../config/env';
 import type {
   ApiScope,
   AuthUser,
@@ -43,6 +43,8 @@ const MAX_CONCURRENT_CURRENT_REQUESTS = 8;
 
 let activeCurrentRequests = 0;
 const currentRequestQueue: Array<() => void> = [];
+let apiRequestSequence = 0;
+let debugConfigurationLogged = false;
 
 type JsonRecord = Record<string, unknown>;
 
@@ -97,6 +99,42 @@ function isPortalRequest(url: string): boolean {
   return new URL(url, window.location.origin).pathname.startsWith('/api/v2/portal/');
 }
 
+function redactApiPath(pathname: string): string {
+  return pathname.replace(
+    /(\/api\/v2\/auth\/invitations\/)[^/]+/gi,
+    '$1[redacted]',
+  );
+}
+
+function describeApiUrl(value: string): Record<string, unknown> {
+  const url = new URL(value, window.location.origin);
+  return {
+    origin: url.origin,
+    path: redactApiPath(url.pathname),
+    queryKeys: [...new Set(url.searchParams.keys())],
+  };
+}
+
+function debugApiConfiguration(): void {
+  if (!API_DEBUG_ENABLED || debugConfigurationLogged) return;
+  debugConfigurationLogged = true;
+  console.info('[Sunbird API debug] configuration', {
+    pageOrigin: window.location.origin,
+    apiMode: API_ORIGIN ? 'cross-origin-public-only' : 'same-origin-proxy',
+    apiOrigin: API_ORIGIN || window.location.origin,
+  });
+}
+
+function debugApiInfo(event: string, details: Record<string, unknown>): void {
+  if (!API_DEBUG_ENABLED) return;
+  console.info(`[Sunbird API debug] ${event}`, details);
+}
+
+function debugApiError(event: string, details: Record<string, unknown>): void {
+  if (!API_DEBUG_ENABLED) return;
+  console.error(`[Sunbird API debug] ${event}`, details);
+}
+
 async function withCurrentRequestSlot<T>(request: () => Promise<T>): Promise<T> {
   if (activeCurrentRequests >= MAX_CONCURRENT_CURRENT_REQUESTS) {
     await new Promise<void>((resolve) => currentRequestQueue.push(resolve));
@@ -116,6 +154,16 @@ export async function apiRequest<T>(pathOrUrl: string, options: RequestOptions =
   const requestUrl = new URL(url, window.location.origin);
   const credentials: RequestCredentials =
     requestUrl.origin === window.location.origin ? 'include' : 'omit';
+  const requestId = ++apiRequestSequence;
+  const startedAt = performance.now();
+
+  debugApiConfiguration();
+  debugApiInfo('request', {
+    requestId,
+    method: options.method ?? 'GET',
+    credentials,
+    request: describeApiUrl(url),
+  });
 
   if (credentials === 'omit' && !requestUrl.pathname.startsWith('/api/v2/public/')) {
     throw new ApiError('Authenticated API requests require a same-origin deployment.', url);
@@ -139,6 +187,22 @@ export async function apiRequest<T>(pathOrUrl: string, options: RequestOptions =
       credentials,
       headers,
       signal: controller.signal,
+    });
+
+    debugApiInfo('response', {
+      requestId,
+      durationMs: Math.round(performance.now() - startedAt),
+      status: response.status,
+      ok: response.ok,
+      redirected: response.redirected,
+      responseUrl: response.url ? describeApiUrl(response.url) : undefined,
+      contentType: response.headers.get('content-type'),
+      contentDisposition: response.headers.get('content-disposition'),
+      cacheControl: response.headers.get('cache-control'),
+      server: response.headers.get('server'),
+      vercelCache: response.headers.get('x-vercel-cache'),
+      vercelId: response.headers.get('x-vercel-id'),
+      proxyMarker: response.headers.get('x-sunbird-api-proxy'),
     });
 
     if (response.status === 204) {
@@ -168,14 +232,35 @@ export async function apiRequest<T>(pathOrUrl: string, options: RequestOptions =
     return payload as T;
   } catch (error) {
     if (error instanceof ApiError) {
+      debugApiError('request failed', {
+        requestId,
+        request: describeApiUrl(url),
+        status: error.status,
+        kind: error.kind,
+        message: error.message,
+      });
       throw error;
     }
 
     if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new ApiError('Request timed out', url, undefined, undefined, 'timeout');
+      const apiError = new ApiError('Request timed out', url, undefined, undefined, 'timeout');
+      debugApiError('request failed', {
+        requestId,
+        request: describeApiUrl(url),
+        kind: apiError.kind,
+        message: apiError.message,
+      });
+      throw apiError;
     }
 
-    throw new ApiError(error instanceof Error ? error.message : 'Request failed', url);
+    const apiError = new ApiError(error instanceof Error ? error.message : 'Request failed', url);
+    debugApiError('request failed', {
+      requestId,
+      request: describeApiUrl(url),
+      kind: apiError.kind,
+      message: apiError.message,
+    });
+    throw apiError;
   } finally {
     window.clearTimeout(timeoutId);
   }

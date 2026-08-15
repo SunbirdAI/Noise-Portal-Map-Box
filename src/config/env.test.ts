@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-async function loadEnvironment(apiOrigin: string, partnerEnabled: string) {
+async function loadEnvironment(apiOrigin: string, partnerEnabled: string, apiDebug = 'false') {
   vi.resetModules();
   vi.stubEnv('VITE_API_ORIGIN', apiOrigin);
   vi.stubEnv('VITE_PARTNER_PORTAL_ENABLED', partnerEnabled);
+  vi.stubEnv('VITE_API_DEBUG', apiDebug);
   return import('./env');
 }
 
@@ -32,5 +33,10 @@ describe('deployment environment modes', () => {
     await expect(loadEnvironment('/api', 'true')).rejects.toThrow(
       'VITE_API_ORIGIN must be empty or a complete http(s) origin. Never set it to /api.',
     );
+  });
+
+  it('enables safe browser diagnostics only when explicitly configured', async () => {
+    expect((await loadEnvironment('', 'true', 'true')).API_DEBUG_ENABLED).toBe(true);
+    expect((await loadEnvironment('', 'true', 'false')).API_DEBUG_ENABLED).toBe(false);
   });
 });

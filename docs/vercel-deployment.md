@@ -86,6 +86,12 @@ Before touching `noise.sunbird.ai`, confirm on the preview:
 6. `/api/v2/auth/csrf/` responses are `Cache-Control: private, no-store`.
 7. Invalid proxy targets such as `/api/proxy?__proxy_path=admin/` return 400 and are not sent upstream.
 
+### Temporary browser diagnostics
+
+When API routing needs investigation, set `VITE_API_DEBUG=true` for the affected Vercel environment and redeploy. The browser console will show `[Sunbird API debug]` entries containing the resolved origin/path, credential mode, response status and safe routing headers. A successful Function response includes `proxyMarker: "vercel-function"`. A `text/html` response with no proxy marker means the request never reached the Function.
+
+Diagnostics never log request bodies or headers, cookie/CSRF values, query values, or invitation tokens. Set `VITE_API_DEBUG=false` again after troubleshooting.
+
 Vercel documents preview deployments and Vite projects in its [Vite deployment guide](https://vercel.com/docs/frameworks/frontend/vite).
 
 ## 5. Prepare the backend for the production hostname

@@ -59,6 +59,7 @@ describe('Vercel API proxy', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
     expect(response.headers.get('Pragma')).toBe('no-cache');
+    expect(response.headers.get('X-Sunbird-Api-Proxy')).toBe('vercel-function');
     const cookies = response.headers.get('Set-Cookie') ?? '';
     expect(cookies).toContain('csrftoken=csrf-value');
     expect(cookies).toContain('sessionid=session-value');
@@ -71,6 +72,7 @@ describe('Vercel API proxy', () => {
     );
 
     expect(response.status).toBe(400);
+    expect(response.headers.get('X-Sunbird-Api-Proxy')).toBe('vercel-function');
     await expect(response.json()).resolves.toEqual({ detail: 'Only API v2 paths can be proxied.' });
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -84,6 +86,7 @@ describe('Vercel API proxy', () => {
 
     expect(response.status).toBe(503);
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(response.headers.get('X-Sunbird-Api-Proxy')).toBe('vercel-function');
     await expect(response.json()).resolves.toEqual({ detail: 'The API proxy is not configured.' });
     expect(fetchMock).not.toHaveBeenCalled();
   });
